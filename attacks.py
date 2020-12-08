@@ -59,7 +59,7 @@ class Attack(object):
             if self.mode.lower() == 'int':
                 adv_imgs = adv_imgs.float()/255.
 
-            outputs, _ = self.target_cls(adv_imgs)
+            outputs, _, _, _ = self.target_cls(adv_imgs)
             _, predicted = torch.max(outputs, 1)
             correct += predicted.eq(labels).sum().item()
 

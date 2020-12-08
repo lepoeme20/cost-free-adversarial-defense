@@ -27,7 +27,7 @@ class FGSM(Attack):
 
         imgs.requires_grad = True
 
-        outputs, _ = self.target_cls(norm_fn(imgs, m, s))
+        outputs, _, _, _ = self.target_cls(norm_fn(imgs, m, s))
         loss = self.criterion(outputs, labels)
         loss.backward()
 

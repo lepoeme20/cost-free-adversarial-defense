@@ -54,6 +54,10 @@ def parser_setting(parser):
         help = 'if adversarial training'
     )
     trn_args.add_argument(
+        '--proposed', action='store_true', default=False,
+        help = 'train with proposed loss'
+    )
+    trn_args.add_argument(
         '--epochs', type=int, default=300, metavar='N',
         help='number of epochs to train (default: auto)'
         )

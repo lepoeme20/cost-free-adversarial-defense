@@ -13,23 +13,31 @@ import config
 from attack_methods import pgd, fgsm, cw, bim
 from utils import get_m_s, norm
 
-class Test():
+
+class Test:
     def __init__(self, args):
         self.args = args
         self.model = network_initialization(args)
         if args.adv_training:
-            root_path = os.path.join(args.save_path, 'w_adv_training')
+            root_path = os.path.join(args.save_path, "w_adv_training")
         else:
-            root_path = os.path.join(args.save_path, 'wo_adv_training')
-        model_path = os.path.join(root_path, args.dataset, args.network, str(args.lr), str(args.batch_size), args.v)
+            root_path = os.path.join(args.save_path, "wo_adv_training")
+        model_path = os.path.join(
+            root_path,
+            args.dataset,
+            args.network,
+            str(args.lr),
+            str(args.batch_size),
+            args.v,
+        )
         self.model_path = {
-            'pretrained_model': os.path.join(model_path, "pretrained_model.pth"),
-            'proposed_model': os.path.join(model_path, "defense_model.pth")
+            "pretrained_model": os.path.join(model_path, "pretrained_model.pth"),
+            "proposed_model": os.path.join(model_path, "proposed_model.pth"),
         }
 
     def load_model(self, model, load_path):
         checkpoint = torch.load(load_path)
-        model.module.load_state_dict(checkpoint['model_state_dict'])
+        model.module.load_state_dict(checkpoint["model_state_dict"])
         return model
 
     def attack(self, target_cls, dataloader):
@@ -38,8 +46,11 @@ class Test():
         attacker = attack_func(target_cls, self.args)
         save_path = os.path.join("Adv_examples", self.args.dataset.lower())
         attacker.inference(
-            args, data_loader=dataloader, save_path=save_path, file_name=self.args.attack_name+".pt"
-            )
+            args,
+            data_loader=dataloader,
+            save_path=save_path,
+            file_name=self.args.attack_name + ".pt",
+        )
 
     def testing(self):
         # inter_model을 사용하고 싶은 경우 self.total_path > self.pre_path 변경
@@ -50,9 +61,9 @@ class Test():
         m, s = get_m_s(args)
 
         # 정상 데이터에 대한 모델 성능 확인
-        if self.args.attack_name.lower() == 'clean':
+        if self.args.attack_name.lower() == "clean":
             correct = 0
-            accumulated_num = 0.
+            accumulated_num = 0.0
             total_num = len(tst_loader)
 
             for step, (inputs, labels) in enumerate(tst_loader, 0):
@@ -68,14 +79,22 @@ class Test():
 
                     acc = 100 * correct / accumulated_num
 
-                    print('Progress : {:.2f}% / Accuracy : {:.2f}%'.format(
-                        (step+1)/total_num*100, acc), end='\r')
+                    print(
+                        "Progress : {:.2f}% / Accuracy : {:.2f}%".format(
+                            (step + 1) / total_num * 100, acc
+                        ),
+                        end="\r",
+                    )
 
-            print('Progress : {:.2f}% / Accuracy : {:.2f}%'.format(
-                (step+1)/total_num*100, acc))
+            print(
+                "Progress : {:.2f}% / Accuracy : {:.2f}%".format(
+                    (step + 1) / total_num * 100, acc
+                )
+            )
         # attack시 방어 성능 확인
         else:
             self.attack(model, tst_loader)
+
 
 if __name__ == "__main__":
     args = config.get_config()

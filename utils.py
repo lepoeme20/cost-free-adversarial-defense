@@ -211,29 +211,31 @@ class AngleLoss(nn.Module):
 # center.scatter_add_(0, labels.unsqueeze(1).repeat(1, features.size(-1)), features)
 # counts = torch.scatter_add(torch.zeros((10, 1)), 0, labels.unsqueeze(1), torch.ones_like(features))
 # center /= counts.clamp(min=1)
-features = torch.rand(256, 256)
-center = torch.rand(10, 256)
 
 
-def get_proximity_loss(center, features, labels, num_class):
-    batch_size = features.size(0)
-    # distmat = torch.add(
-    #     torch.pow(features, 2).sum(dim=1, keepdim=True).expand(batch_size, num_class),
-    #     torch.pow(center, 2).sum(dim=1, keepdim=True).expand(num_class, batch_size).t(),
-    # )
-    # distmat = torch.addmm(distmat, features, center.t(), beta=1, alpha=-2)
-    dist_mat = torch.cdist(features, center, p=2)
-    classes = torch.arange(num_class, dtype=torch.long, device=features.device)
+class ProximityLoss(nn.Module):
+    def __init__(self, num_class):
+        self.num_class = num_class
 
-    mask = labels.unsqueeze(1).eq(classes).squeeze()
+    def get_proximity_loss(center, features, labels):
+        batch_size = features.size(0)
+        # distmat = torch.add(
+        #     torch.pow(features, 2).sum(dim=1, keepdim=True).expand(batch_size, num_class),
+        #     torch.pow(center, 2).sum(dim=1, keepdim=True).expand(num_class, batch_size).t(),
+        # )
+        # distmat = torch.addmm(distmat, features, center.t(), beta=1, alpha=-2)
+        dist_mat = torch.cdist(features, center, p=2)
+        classes = torch.arange(self.num_class, dtype=torch.long, device=features.device)
 
-    dist = []
-    for i in range(batch_size):
-        value = dist_mat[i][mask[i]]
-        value = value.clamp(min=1e-12, max=1e12)
-        dist.append(value)
-    dist = torch.cat(dist)
-    loss = dist.mean()
+        mask = labels.unsqueeze(1).eq(classes).squeeze()
 
-    return loss
+        dist = []
+        for i in range(batch_size):
+            value = dist_mat[i][mask[i]]
+            value = value.clamp(min=1e-12, max=1e12)
+            dist.append(value)
+        dist = torch.cat(dist)
+        loss = dist.mean()
+
+        return loss
 

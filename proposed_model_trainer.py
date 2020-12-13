@@ -9,7 +9,7 @@ from utils import (
     get_optim,
     get_uniform_loss,
     AngleLoss,
-    get_proximity_loss,
+    ProximityLoss,
 )
 from attack_methods import pgd
 
@@ -40,6 +40,7 @@ class ProposedTrainer:
         self.criterion_L1 = nn.L1Loss()
         self.criterion_MSE = nn.MSELoss()
         self.criterion_A_Softmax = AngleLoss()
+        self.criterion_proximity = ProximityLoss(args.num_class)
 
         # set logger path
         log_num = 0
@@ -52,6 +53,7 @@ class ProposedTrainer:
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(model, args.lr)
+        optimizer_prox = torch.optim.SGD(self.criterion_proximity.parameters(), lr=0.5)
 
         model_path = os.path.join(self.save_path, "proposed_model_100.pth")
 
@@ -89,13 +91,14 @@ class ProposedTrainer:
                 )
                 # new_labels = center[labels]
                 # mse_loss = self.criterion_MSE(features, new_labels)
-                mse_loss = get_proximity_loss(center, features, labels, args.num_class)
+                mse_loss = self.criterion_proximity(center, features, labels)
                 loss = ce_loss + 2 * uniform_loss + mse_loss
                 optimizer.zero_grad()
+                optimizer_proximity.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                # nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
-
+                optimizer_proximity.step()
                 #################### Logging ###################
                 print(
                     f"[Trn] Epoch {epoch+1}/{args.epochs} Batch {step+1}/{len(self.train_loader)} Total Loss {loss.item():.4f} CE Loss {ce_loss.item():.4f} U Loss {uniform_loss.item():.4f} MSE Loss {mse_loss.item():.4f}",

@@ -45,7 +45,7 @@ def parser_setting(parser):
         "--device-ids", type=int, nargs='*', help="device id"
     )
     base_args.add_argument(
-        "--network", type=str, choices=['resnet34', 'resnet110']
+        "--network", type=str, default='resnet110' # choices=['resnet34', 'resnet110']
     )
 
     trn_args = parser.add_argument_group('training hyper params')
@@ -62,15 +62,11 @@ def parser_setting(parser):
         help='number of epochs to train (default: auto)'
         )
     trn_args.add_argument(
-        '--finetune-epochs', type=int, default=400, metavar='N',
-        help='number of epochs to fine-tuning (default: auto)'
-        )
-    trn_args.add_argument(
-        '--batch-size', type=int, default=1024, metavar='N',
+        '--batch-size', type=int, default=256,
         help='input batch size for training (default: auto)'
         )
     trn_args.add_argument(
-        '--test-batch-size', type=int, default=None, metavar='N',
+        '--test-batch-size', type=int, default=256,
         help='input batch size for testing (default: auto)'
         )
     trn_args.add_argument(
@@ -105,7 +101,7 @@ def parser_setting(parser):
         '--test-model', type=str, default='pretrained_model'
     )
     attack_args.add_argument(
-        '--eps', type=float, default=0.02, help="For bound eta"
+        '--eps', type=float, default=8/255, help="For bound eta"
     )
     # arguments for PGD
     attack_args.add_argument(
@@ -139,29 +135,15 @@ def parser_setting(parser):
     )
     # arguments for i-FGSM
     attack_args.add_argument(
-        '--bim-step', type=int, default=5, help="Iteration for iterative FGSM"
+        '--bim-step', type=int, default=10, help="Iteration for iterative FGSM"
     )
 
-    visualization_args = parser.add_argument_group('Visualization')
-    visualization_args.add_argument(
-        '--vis-normal', action='store_true', default=False,
-        help="Set true if you want to save normal images"
+    ablation_args = parser.add_argument_group('Ablation')
+    ablation_args.add_argument(
+        '--intra-p', type=int, choices=[0, 1, 2], help="p norm for intra class"
     )
-    visualization_args.add_argument(
-        '--vis-n-rows', type=int, default=8,
-        help="# of image rows at each saved figure"
-        "default value is same as default value of nrow in torchvision.utils.save_image"
-    )
-    visualization_args.add_argument(
-        '--vis-batch-size', type=int, default=1, help=""
-    )
-    visualization_args.add_argument(
-        '--vis-set-idx', action='store_true', default=False,
-        help="Set True if you want to saving specific indices"
-    )
-    visualization_args.add_argument(
-        '--vis-indices', type=int, nargs='*',
-        help="Set indices for saving images if you set vis_set_idx True"
+    ablation_args.add_argument(
+        '--inter-p', type=int, choices=[0, 1, 2], help="p norm for inter class"
     )
 
     return parser

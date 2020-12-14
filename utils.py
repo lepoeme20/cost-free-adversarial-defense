@@ -125,106 +125,23 @@ def __get_dataset_name(args):
     return d_name
 
 
-def get_uniform_loss(center, features, labels, num_class):
-    # Update center
-    # selected_center = center[labels]
 
-    # diff = selected_center - features
-
-    # labels_rh = labels.reshape(-1, 1)
-
-    # adj = labels_rh.eq(labels_rh.transpose(0, 1))
-
-    # denom = torch.sum(adj, axis=1, keepdim=True)
-    # diff /=denom
-
-    # # eq. (7)
-    # center.scatter_add_(0, labels_rh.repeat(1, diff.size(-1)), diff)
-    # center.detach_()
-    # center = torch.clamp(center, min=torch.min(features).item(), max=torch.max(features).item())
-
-    # center[0] + new_diff[1] + new_diff[2]
-    # center[1] + new_diff[0] + new_diff[3] + new_diff[4] + new_diff[5]
-
-    count_input = torch.zeros((num_class, 1), device=labels.device)
-    center.scatter_add_(0, labels.unsqueeze(1).repeat(1, features.size(-1)), features)
-    counts = torch.scatter_add(
-        count_input, 0, labels.unsqueeze(1), torch.ones_like(features)
-    )
-    center /= counts.clamp(min=1)
-
-    dist_mat = torch.cdist(center, center, p=float("Inf"))
-    combi = torch.combinations(torch.tensor(range(num_class)))
-
-    total_dist = 0
-    for class_idx in combi:
-        i, j = class_idx
-        dist = dist_mat[i][j]
-        dist = torch.reciprocal(dist)
-        total_dist += dist
-
-    # uniform loss
-    uniform_loss = (total_dist * 2) * (1 / (num_class * (num_class - 1)))
-    return center.detach(), uniform_loss
-
-
-class AngleLoss(nn.Module):
-    def __init__(self, gamma=0):
-        super(AngleLoss, self).__init__()
-        self.gamma = gamma
-        self.it = 0
-        self.LambdaMin = 5.0
-        self.LambdaMax = 1500.0
-        self.lamb = 1500.0
-
-    def forward(self, inputs, target):
-        self.it += 1
-        cos_theta, phi_theta = inputs
-        target = target.view(-1, 1)  # size=(B,1)
-
-        index = cos_theta.data * 0.0  # size=(B,Classnum)
-        index.scatter_(1, target.data.view(-1, 1), 1)
-        # index = index.byte()
-        index = index.to(dtype=torch.bool)
-
-        self.lamb = max(self.LambdaMin, self.LambdaMax / (1 + 0.1 * self.it))
-        output = cos_theta * 1.0  # size=(B,Classnum)
-        output[index] -= cos_theta[index] * (1.0 + 0) / (1 + self.lamb)
-        output[index] += phi_theta[index] * (1.0 + 0) / (1 + self.lamb)
-
-        logpt = F.log_softmax(output)
-        logpt = logpt.gather(1, target)
-        logpt = logpt.view(-1)
-        pt = logpt.data.exp()
-
-        loss = -1 * (1 - pt) ** self.gamma * logpt
-        loss = loss.mean()
-
-        return loss
-
-
-# features = torch.rand((5, 5))
-# labels = torch.randint(0, 10, (5, ))
-
-# center = torch.zeros((10, 5))
-
-# center.scatter_add_(0, labels.unsqueeze(1).repeat(1, features.size(-1)), features)
-# counts = torch.scatter_add(torch.zeros((10, 1)), 0, labels.unsqueeze(1), torch.ones_like(features))
-# center /= counts.clamp(min=1)
-
-
-class ProximityLoss(nn.Module):
-    def __init__(self, num_class):
+class Loss(nn.Module):
+    def __init__(self, num_class, feature_dim, device, intra_p, inter_p):
+        super(Loss, self).__init__()
         self.num_class = num_class
+        self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
+        self.intra_p = intra_p if intra_p != 0 else float("Inf")
+        self.inter_p = inter_p if inter_p != 0 else float("Inf")
 
-    def get_proximity_loss(center, features, labels):
+    def forward(self, features, labels):
+        intra_loss = self.intra_loss(features, labels)
+        inter_loss = self.inter_loss(features, labels)
+        return intra_loss, inter_loss
+
+    def intra_loss(self, features, labels):
         batch_size = features.size(0)
-        # distmat = torch.add(
-        #     torch.pow(features, 2).sum(dim=1, keepdim=True).expand(batch_size, num_class),
-        #     torch.pow(center, 2).sum(dim=1, keepdim=True).expand(num_class, batch_size).t(),
-        # )
-        # distmat = torch.addmm(distmat, features, center.t(), beta=1, alpha=-2)
-        dist_mat = torch.cdist(features, center, p=2)
+        dist_mat = torch.cdist(features, self.center, p=self.intra_p)
         classes = torch.arange(self.num_class, dtype=torch.long, device=features.device)
 
         mask = labels.unsqueeze(1).eq(classes).squeeze()
@@ -237,5 +154,29 @@ class ProximityLoss(nn.Module):
         dist = torch.cat(dist)
         loss = dist.mean()
 
+        return loss
+
+    def inter_loss(self, features, labels):
+        count_input = torch.zeros((self.num_class, 1), device=labels.device)
+        center = self.center.scatter_add(0, labels.unsqueeze(1).repeat(1, features.size(-1)), features)
+        counts = torch.scatter_add(
+            count_input, 0, labels.unsqueeze(1), torch.ones_like(features)
+    )
+        center /= counts.clamp(min=1)
+
+        dist_mat = torch.cdist(center, center, p=self.inter_p) #float("Inf")
+        combi = torch.combinations(torch.tensor(range(self.num_class)))
+
+        total_dist = []
+        for class_idx in combi:
+            i, j = class_idx
+            dist = dist_mat[i][j]
+            dist = torch.reciprocal(dist)
+            total_dist.append(dist)
+        # dist = torch.cat(total_dist)
+        loss = dist.mean() * 2
+
+        # uniform loss
+        # uniform_loss = loss * (1 / (self.num_class * (self.num_class - 1)))
         return loss
 

@@ -7,11 +7,10 @@ from utils import (
     get_m_s,
     norm,
     get_optim,
-    get_uniform_loss,
-    AngleLoss,
-    ProximityLoss,
+    Loss,
 )
 from attack_methods import pgd
+from tqdm import tqdm
 
 
 class ProposedTrainer:
@@ -30,32 +29,35 @@ class ProposedTrainer:
             root_path = os.path.join(args.save_path, "wo_adv_training")
 
         save_path = os.path.join(root_path, args.dataset)
-        self.save_path = os.path.join(
-            save_path, args.network, str(args.lr), str(args.batch_size), args.v
-        )
+        self.save_path = os.path.join(save_path, args.v)
         os.makedirs(self.save_path, exist_ok=True)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion_L1 = nn.L1Loss()
-        self.criterion_MSE = nn.MSELoss()
-        self.criterion_A_Softmax = AngleLoss()
-        self.criterion_proximity = ProximityLoss(args.num_class)
+        #TODO: Ablation study for p norm
+        self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p)
 
         # set logger path
         log_num = 0
-        while os.path.exists(f"logger/proposed/{str(log_num)}"):
+        while os.path.exists(f"logger/proposed/v{str(log_num)}"):
             log_num += 1
-        self.writer = SummaryWriter(f"logger/proposed/{str(log_num)}")
+        self.writer = SummaryWriter(f"logger/proposed/v{str(log_num)}")
 
     def training(self, args):
         model = self.model
+        pretrained_path = os.path.join(self.save_path, 'pretrained_model.pth')
+        checkpoint = torch.load(pretrained_path)
+        model.module.load_state_dict(checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(model, args.lr)
-        optimizer_prox = torch.optim.SGD(self.criterion_proximity.parameters(), lr=0.5)
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=0.5)
 
-        model_path = os.path.join(self.save_path, "proposed_model_100.pth")
+        # ablation study
+        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pth"
+        # model_name = f"proposed_model.pth" # base model
+        model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
         self.writer.close()
@@ -69,12 +71,15 @@ class ProposedTrainer:
             requires_grad=False,
         )
 
+        trn_loss_log = tqdm(total=0, position=2, bar_format='{desc}')
+        dev_loss_log = tqdm(total=0, position=4, bar_format='{desc}')
+        outer = tqdm(total=args.epochs, desc="Epoch", position=0)
         # Train target classifier
         for epoch in range(args.epochs):
             _dev_loss = 0.0
-
-            print("")
-            for step, (inputs, labels) in enumerate(self.train_loader, 0):
+            train = tqdm(total=len(self.train_loader), desc="Steps", position=1)
+            dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3)
+            for step, (inputs, labels) in enumerate(self.train_loader):
                 model.train()
                 current_step += 1
 
@@ -84,27 +89,20 @@ class ProposedTrainer:
                 # features: 256d
                 logit, _, features, _ = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                # ce_loss = self.criterion_A_Softmax(logit, labels)
+                intra_loss, inter_loss = self.criterion(features, labels)
+                #TODO: Ablation study about lambda
+                loss = ce_loss + intra_loss + inter_loss
 
-                center, uniform_loss = get_uniform_loss(
-                    center, features, labels, args.num_class
-                )
-                # new_labels = center[labels]
-                # mse_loss = self.criterion_MSE(features, new_labels)
-                mse_loss = self.criterion_proximity(center, features, labels)
-                loss = ce_loss + 2 * uniform_loss + mse_loss
                 optimizer.zero_grad()
-                optimizer_proximity.zero_grad()
+                optimizer_proposed.zero_grad()
                 loss.backward()
-                # nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
-                optimizer_proximity.step()
+                optimizer_proposed.step()
                 #################### Logging ###################
-                print(
-                    f"[Trn] Epoch {epoch+1}/{args.epochs} Batch {step+1}/{len(self.train_loader)} Total Loss {loss.item():.4f} CE Loss {ce_loss.item():.4f} U Loss {uniform_loss.item():.4f} MSE Loss {mse_loss.item():.4f}",
-                    end="\r",
+                trn_loss_log.set_description_str(
+                    f"Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Inter Loss: {inter_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}"
                 )
-
+                train.update(1)
                 if step == 0 or current_step % len(self.train_loader) * 30 == 0:
                     self.writer.add_scalar(
                         "train/loss", loss.item(), global_step=current_step
@@ -126,8 +124,7 @@ class ProposedTrainer:
                     )
                     self.writer.close()
 
-            print("")
-            for idx, (inputs, labels) in enumerate(self.dev_loader, 0):
+            for idx, (inputs, labels) in enumerate(self.dev_loader):
                 model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
@@ -136,40 +133,34 @@ class ProposedTrainer:
                 with torch.no_grad():
                     logit, _, features, _ = model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    center, uniform_loss = get_uniform_loss(
-                        center, features, labels, args.num_class
-                    )
-                    # new_labels = center[labels]
-                    # mse_loss = self.criterion_MSE(features, new_labels)
-                    mse_loss = get_proximity_loss(
-                        center, features, labels, args.num_class
-                    )
-                    loss = ce_loss + uniform_loss + mse_loss
+                    intra_loss, inter_loss = self.criterion(features, labels)
+                    loss = ce_loss + intra_loss + inter_loss
 
                     # Loss
                     _dev_loss += loss
                     dev_loss = _dev_loss / (idx + 1)
 
-                    print(
-                        "[Dev] {}/{} Loss: {:.3f}".format(
-                            idx + 1, len(self.dev_loader), dev_loss
-                        ),
-                        end="\r",
+                    dev_loss_log.set_description_str(
+                        f"Loss: {dev_loss:.4f}"
                     )
 
                     #################### Logging ###################
+                    dev.update(1)
                     if idx % args.dev_interval == 0:
                         self.writer.add_scalar("dev/loss", loss.item(), dev_step)
                         self.writer.close()
 
             scheduler.step(dev_loss)
+            outer.update(1)
 
             if dev_loss < best_loss:
                 best_loss = dev_loss
                 self._save_model(model, optimizer, scheduler, epoch, model_path)
 
     def _save_model(self, model, optimizer, scheduler, epoch, path):
-        print("The best model is saved")
+        tqdm.write(
+            "The best model is saved"
+        )
         torch.save(
             {
                 "model_state_dict": model.module.state_dict(),

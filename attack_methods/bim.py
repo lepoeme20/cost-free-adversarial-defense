@@ -26,11 +26,11 @@ class BIM(Attack):
         adv_imgs.requires_grad = True
 
         for i in range(self.step):
-            outputs, _ = self.target_cls(norm_fn(adv_imgs, m, s))
+            outputs, _, _, _ = self.target_cls(norm_fn(adv_imgs, m, s))
             loss = self.criterion(outputs, labels)
 
             gradients = torch.autograd.grad(loss, adv_imgs)[0]
-            adv_imgs = adv_imgs+(self.eps*gradients.sign())
+            adv_imgs = adv_imgs+(self.alpha*gradients.sign())
             adv_imgs = torch.clamp(adv_imgs, 0, 1)
 
         return adv_imgs, labels

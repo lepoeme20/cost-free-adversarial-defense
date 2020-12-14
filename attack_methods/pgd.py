@@ -35,7 +35,7 @@ class PGD(Attack):
             imgs = torch.clamp(imgs, 0, 1)
 
         for _ in range(self.n_iters):
-            outputs, _ = self.target_cls(norm_fn(imgs, m, s))
+            outputs, _, _, _ = self.target_cls(norm_fn(imgs, m, s))
             loss = self.criterion(outputs, labels)
 
             grad = torch.autograd.grad(loss, imgs)[0]

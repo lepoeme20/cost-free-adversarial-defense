@@ -177,6 +177,6 @@ class Loss(nn.Module):
         loss = dist.mean() * 2
 
         # uniform loss
-        # uniform_loss = loss * (1 / (self.num_class * (self.num_class - 1)))
-        return loss
+        uniform_loss = loss * (1 / (self.num_class * (self.num_class - 1)))
+        return uniform_loss # loss
 

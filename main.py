@@ -6,7 +6,6 @@ import config
 import numpy as np
 from trainer import Trainer
 from proposed_model_trainer import ProposedTrainer
-from fine_tune import fine_tuning
 
 def main():
     args = config.get_config()

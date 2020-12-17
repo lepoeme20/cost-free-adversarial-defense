@@ -45,7 +45,7 @@ class ProposedTrainer:
 
     def training(self, args):
         model = self.model
-        pretrained_path = os.path.join(self.save_path, 'pretrained_model.pth')
+        pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
         checkpoint = torch.load(pretrained_path)
         model.module.load_state_dict(checkpoint["model_state_dict"])
 
@@ -55,8 +55,8 @@ class ProposedTrainer:
         optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=0.5)
 
         # ablation study
-        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pth"
-        # model_name = f"proposed_model.pth" # base model
+        # model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
+        model_name = f"proposed_model.pt" # base model
         model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
@@ -73,12 +73,12 @@ class ProposedTrainer:
 
         trn_loss_log = tqdm(total=0, position=2, bar_format='{desc}')
         dev_loss_log = tqdm(total=0, position=4, bar_format='{desc}')
-        outer = tqdm(total=args.epochs, desc="Epoch", position=0)
+        outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
         # Train target classifier
         for epoch in range(args.epochs):
             _dev_loss = 0.0
-            train = tqdm(total=len(self.train_loader), desc="Steps", position=1)
-            dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3)
+            train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
+            dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
             for step, (inputs, labels) in enumerate(self.train_loader):
                 model.train()
                 current_step += 1
@@ -91,7 +91,7 @@ class ProposedTrainer:
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss, inter_loss = self.criterion(features, labels)
                 #TODO: Ablation study about lambda
-                loss = ce_loss + intra_loss + inter_loss
+                loss = ce_loss + intra_loss + 2*inter_loss
 
                 optimizer.zero_grad()
                 optimizer_proposed.zero_grad()

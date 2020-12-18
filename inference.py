@@ -25,14 +25,12 @@ class Test:
         model_path = os.path.join(
             root_path,
             args.dataset,
-            args.network,
-            str(args.lr),
-            str(args.batch_size),
             args.v,
         )
         self.model_path = {
-            "pretrained_model": os.path.join(model_path, "pretrained_model.pth"),
-            "proposed_model": os.path.join(model_path, "proposed_model.pth"),
+            "pretrained_model": os.path.join(model_path, "pretrained_model.pt"),
+            # "proposed_model": os.path.join(model_path, "proposed_model.pt"),
+            "proposed_model": os.path.join(model_path, f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt")
         }
 
     def load_model(self, model, load_path):

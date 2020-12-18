@@ -127,12 +127,12 @@ def __get_dataset_name(args):
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, feature_dim, device, intra_p, inter_p):
+    def __init__(self, num_class, feature_dim, device):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
-        self.intra_p = intra_p if intra_p != 0 else float("Inf")
-        self.inter_p = inter_p if inter_p != 0 else float("Inf")
+        # self.intra_p = intra_p if intra_p != 0 else float("Inf")
+        # self.inter_p = inter_p if inter_p != 0 else float("Inf")
 
     def forward(self, features, labels):
         intra_loss = self.intra_loss(features, labels)
@@ -141,7 +141,7 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels):
         batch_size = features.size(0)
-        dist_mat = torch.cdist(features, self.center, p=self.intra_p)
+        dist_mat = torch.cdist(features, self.center, p=2)
         classes = torch.arange(self.num_class, dtype=torch.long, device=features.device)
 
         mask = labels.unsqueeze(1).eq(classes).squeeze()
@@ -164,19 +164,19 @@ class Loss(nn.Module):
     )
         center /= counts.clamp(min=1)
 
-        dist_mat = torch.cdist(center, center, p=self.inter_p) #float("Inf")
+        dist_mat = torch.cdist(center, center, p=2) #float("Inf")
         combi = torch.combinations(torch.tensor(range(self.num_class)))
 
         total_dist = []
         for class_idx in combi:
             i, j = class_idx
-            dist = dist_mat[i][j]
+            dist = dist_mat[i][j] * 2
             dist = torch.reciprocal(dist)
             total_dist.append(dist)
         # dist = torch.cat(total_dist)
-        loss = dist.mean() * 2
+        loss = dist.mean()
 
         # uniform loss
-        uniform_loss = loss * (1 / (self.num_class * (self.num_class - 1)))
-        return uniform_loss # loss
+        # uniform_loss = loss * (1 / (self.num_class * (self.num_class - 1)))
+        return loss
 

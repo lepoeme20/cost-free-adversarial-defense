@@ -34,8 +34,9 @@ class ProposedTrainer:
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        #TODO: Ablation study for p norm
-        self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p)
+        self.criterion = Loss(args.num_class, 256, args.device)
+        # Ablation study
+        # self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p)
 
         # set logger path
         log_num = 0
@@ -54,9 +55,11 @@ class ProposedTrainer:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=0.5)
 
+        # base model
+        # model_name = f"proposed_model.pt"
         # ablation study
         # model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
-        model_name = f"proposed_model.pt" # base model
+        model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
         model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
@@ -73,6 +76,7 @@ class ProposedTrainer:
 
         trn_loss_log = tqdm(total=0, position=2, bar_format='{desc}')
         dev_loss_log = tqdm(total=0, position=4, bar_format='{desc}')
+        best_epoch_log = tqdm(total=0, position=5, bar_format='{desc}')
         outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
         # Train target classifier
         for epoch in range(args.epochs):
@@ -91,7 +95,7 @@ class ProposedTrainer:
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss, inter_loss = self.criterion(features, labels)
                 #TODO: Ablation study about lambda
-                loss = ce_loss + intra_loss + 2*inter_loss
+                loss = ce_loss + args.lambda_intra*intra_loss + args.lambda_inter*inter_loss
 
                 optimizer.zero_grad()
                 optimizer_proposed.zero_grad()
@@ -100,7 +104,7 @@ class ProposedTrainer:
                 optimizer_proposed.step()
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
-                    f"Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Inter Loss: {inter_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}"
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Inter Loss: {inter_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}"
                 )
                 train.update(1)
                 if step == 0 or current_step % len(self.train_loader) * 30 == 0:
@@ -141,7 +145,7 @@ class ProposedTrainer:
                     dev_loss = _dev_loss / (idx + 1)
 
                     dev_loss_log.set_description_str(
-                        f"Loss: {dev_loss:.4f}"
+                        f"[DEV] Loss: {dev_loss:.4f}"
                     )
 
                     #################### Logging ###################
@@ -154,13 +158,13 @@ class ProposedTrainer:
             outer.update(1)
 
             if dev_loss < best_loss:
+                best_epoch_log.set_description_str(
+                    f"Best Epoch: {epoch} / {args.epochs}"
+                )
                 best_loss = dev_loss
                 self._save_model(model, optimizer, scheduler, epoch, model_path)
 
     def _save_model(self, model, optimizer, scheduler, epoch, path):
-        tqdm.write(
-            "The best model is saved"
-        )
         torch.save(
             {
                 "model_state_dict": model.module.state_dict(),

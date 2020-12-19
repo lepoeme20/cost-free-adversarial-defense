@@ -146,10 +146,10 @@ def parser_setting(parser):
         '--inter-p', type=int, choices=[0, 1, 2], help="p norm for inter class"
     )
     ablation_args.add_argument(
-        '--lambda-intra', type=float, default=1., help="Intra loss weight"
+        '--lambda-intra', type=float, default=2., help="Intra loss weight"
     )
     ablation_args.add_argument(
-        '--lambda-inter', type=float, default=1., help="Inter loss weight"
+        '--lambda-inter', type=float, default=0.02, help="Inter loss weight"
     )
 
     return parser

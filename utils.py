@@ -127,12 +127,12 @@ def __get_dataset_name(args):
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, feature_dim, device):
+    def __init__(self, num_class, feature_dim, device, intra_p, inter_p):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
-        # self.intra_p = intra_p if intra_p != 0 else float("Inf")
-        # self.inter_p = inter_p if inter_p != 0 else float("Inf")
+        self.intra_p = intra_p if intra_p != 0 else float("Inf")
+        self.inter_p = inter_p if inter_p != 0 else float("Inf")
 
     def forward(self, features, labels):
         intra_loss = self.intra_loss(features, labels)
@@ -141,7 +141,7 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels):
         batch_size = features.size(0)
-        dist_mat = torch.cdist(features, self.center, p=2)
+        dist_mat = torch.cdist(features, self.center, p=self.intra_p)
         classes = torch.arange(self.num_class, dtype=torch.long, device=features.device)
 
         mask = labels.unsqueeze(1).eq(classes).squeeze()
@@ -164,7 +164,7 @@ class Loss(nn.Module):
     )
         center /= counts.clamp(min=1)
 
-        dist_mat = torch.cdist(center, center, p=2) #float("Inf")
+        dist_mat = torch.cdist(center, center, p=self.intra_p) #float("Inf")
         combi = torch.combinations(torch.tensor(range(self.num_class)))
 
         total_dist = []

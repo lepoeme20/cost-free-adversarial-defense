@@ -34,9 +34,9 @@ class ProposedTrainer:
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, 256, args.device)
+        # self.criterion = Loss(args.num_class, 256, args.device)
         # Ablation study
-        # self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p)
+        self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p)
 
         # set logger path
         log_num = 0
@@ -58,8 +58,8 @@ class ProposedTrainer:
         # base model
         # model_name = f"proposed_model.pt"
         # ablation study
-        # model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
-        model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
+        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
+        # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
         model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
@@ -159,7 +159,7 @@ class ProposedTrainer:
 
             if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
-                    f"Best Epoch: {epoch} / {args.epochs}"
+                    f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
                 best_loss = dev_loss
                 self._save_model(model, optimizer, scheduler, epoch, model_path)

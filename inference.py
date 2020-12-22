@@ -18,19 +18,16 @@ class Test:
     def __init__(self, args):
         self.args = args
         self.model = network_initialization(args)
-        if args.adv_training:
-            root_path = os.path.join(args.save_path, "w_adv_training")
-        else:
-            root_path = os.path.join(args.save_path, "wo_adv_training")
         model_path = os.path.join(
-            root_path,
+            args.save_path,
             args.dataset,
-            args.v,
         )
         self.model_path = {
             "pretrained_model": os.path.join(model_path, "pretrained_model.pt"),
             # "proposed_model": os.path.join(model_path, "proposed_model.pt"),
             "proposed_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt")
+            # "proposed_adv_model": os.path.join(model_path, "proposed_model_adv_train.pt")
+            "proposed_adv_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_adv_train.pt")
         }
 
     def load_model(self, model, load_path):

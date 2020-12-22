@@ -39,19 +39,25 @@ class ProposedTrainer:
 
     def training(self, args):
         model = self.model
-        pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
-        checkpoint = torch.load(pretrained_path)# , map_location=f"cuda:{args.device_ids[0]}")
-        model.module.load_state_dict(checkpoint["model_state_dict"])
-
+        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=0.01)
         if args.adv_train:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
-            attacker = attack_func(model, args)
+            # model_name = 'proposed_model_adv.pt'
+            # model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_adv.pt"
+            # pretrained_path = os.path.join(self.save_path, model_name)
+            # optimizer_proposed.load_state_dict(torch.load(pretrained_path)["optimizer_proposed_state_dict"])
+        else:
+            pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
+
+        # load the model weights
+        pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
+        checkpoint = torch.load(pretrained_path)#, map_location=f"cuda:{args.device_ids[0]}")
+        model.module.load_state_dict(checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(model, args.lr)
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=0.5)
 
         # base model
         # model_name = f"proposed_model.pt"
@@ -90,6 +96,7 @@ class ProposedTrainer:
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if args.adv_train:
+                    attacker = attack_func(model, args)
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)
                     labels = torch.cat((labels, adv_labels))
@@ -151,7 +158,16 @@ class ProposedTrainer:
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
                 best_loss = dev_loss
-                self._save_model(model, optimizer, scheduler, epoch, model_path)
+                torch.save(
+                    {
+                        "model_state_dict": model.module.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
+                        "scheduler_state_dict": scheduler.state_dict(),
+                        "trained_epoch": epoch
+                    },
+                    model_path
+                )
 
             # tensorboard logging
             self.writer.add_scalar(
@@ -174,15 +190,4 @@ class ProposedTrainer:
                     tag="Features",
                 )
                 self.writer.close()
-
-    def _save_model(self, model, optimizer, scheduler, epoch, path):
-        torch.save(
-            {
-                "model_state_dict": model.module.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "scheduler_state_dict": scheduler.state_dict(),
-                "trained_epoch": epoch,
-            },
-            path,
-        )
 

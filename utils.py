@@ -4,16 +4,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 from torchvision import transforms
-from resnet import resnet34
 from resnet110 import resnet
 import torch.nn.functional as F
 
 
 def network_initialization(args):
-    if args.network == "resnet110":
-        net = resnet(args.num_class, args.rgb, args.batch_size)
-    else:
-        net = resnet34(args.num_class, args.rgb, args.batch_size)
+    net = resnet(args.num_class, args.rgb, args.batch_size)
 
     # Using multi GPUs if you have
     if torch.cuda.device_count() > 0:

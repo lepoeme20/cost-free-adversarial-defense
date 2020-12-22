@@ -50,7 +50,7 @@ def parser_setting(parser):
 
     trn_args = parser.add_argument_group('training hyper params')
     trn_args.add_argument(
-        '--adv-training', action='store_true', default=False,
+        '--adv-train', action='store_true', default=False,
         help = 'if adversarial training'
     )
     trn_args.add_argument(

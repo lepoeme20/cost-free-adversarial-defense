@@ -13,7 +13,7 @@ def network_initialization(args):
 
     # Using multi GPUs if you have
     if torch.cuda.device_count() > 0:
-        net = nn.DataParallel(net, device_ids=args.device_ids)
+       net = nn.DataParallel(net, device_ids=args.device_ids)
 
     # change device to set device (CPU or GPU)
     net.to(args.device)
@@ -123,12 +123,13 @@ def __get_dataset_name(args):
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, feature_dim, device, intra_p, inter_p):
+    def __init__(self, num_class, feature_dim, device, intra_p, inter_p, adv_train):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
         self.intra_p = intra_p if intra_p != 0 else float("Inf")
         self.inter_p = inter_p if inter_p != 0 else float("Inf")
+        self.adv_train = adv_train
 
     def forward(self, features, labels):
         intra_loss = self.intra_loss(features, labels)
@@ -153,6 +154,9 @@ class Loss(nn.Module):
         return loss
 
     def inter_loss(self, features, labels):
+        if self.adv_train:
+            features = features[:int(features.size(0)/2), ...]
+            labels = labels[:int(labels.size(0)/2), ...]
         count_input = torch.zeros((self.num_class, 1), device=labels.device)
         center = self.center.scatter_add(0, labels.unsqueeze(1).repeat(1, features.size(-1)), features)
         counts = torch.scatter_add(

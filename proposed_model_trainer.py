@@ -44,7 +44,8 @@ class ProposedTrainer:
         model.module.load_state_dict(checkpoint["model_state_dict"])
 
         if args.adv_train:
-            attacker = pgd(model, args)
+            attack_func = getattr(pgd, "PGD")
+            attacker = attack_func(model, args)
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(model, args.lr)

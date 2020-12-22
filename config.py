@@ -128,7 +128,7 @@ def parser_setting(parser):
         '--cw-lr', type=float, default=0.01, help="learning rate for CW attack"
     )
     attack_args.add_argument(
-        '--cw-binary-search-steps', type=int, default=1, help="# of iteration for CW optimization"
+        '--cw-binary-search-steps', type=int, default=10, help="# of iteration for CW optimization"
     )
     attack_args.add_argument(
         '--cw-targeted', action='store_true', default=False, help="d"

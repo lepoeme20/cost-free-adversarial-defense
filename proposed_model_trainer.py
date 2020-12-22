@@ -112,26 +112,6 @@ class ProposedTrainer:
                     f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Inter Loss: {inter_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}"
                 )
                 train.update(1)
-                if step == 0 or current_step % len(self.train_loader) * 30 == 0:
-                    self.writer.add_scalar(
-                        "train/loss", loss.item(), global_step=current_step
-                    )
-                    self.writer.close()
-                    self.writer.add_embedding(
-                        center,
-                        metadata=list(range(0, args.num_class)),
-                        global_step=current_step,
-                        tag="Centers",
-                    )
-                    self.writer.close()
-                    self.writer.add_embedding(
-                        features,
-                        metadata=labels.data.cpu().numpy(),
-                        label_img=inputs,
-                        global_step=current_step,
-                        tag="Features",
-                    )
-                    self.writer.close()
 
             for idx, (inputs, labels) in enumerate(self.dev_loader):
                 model.eval()
@@ -172,6 +152,28 @@ class ProposedTrainer:
                 )
                 best_loss = dev_loss
                 self._save_model(model, optimizer, scheduler, epoch, model_path)
+
+            # tensorboard logging
+            self.writer.add_scalar(
+                "train/loss", loss.item(), global_step=current_step
+            )
+            if epoch % 10 == 0:
+                self.writer.close()
+                self.writer.add_embedding(
+                    center,
+                    metadata=list(range(0, args.num_class)),
+                    global_step=current_step,
+                    tag="Centers",
+                )
+                self.writer.close()
+                self.writer.add_embedding(
+                    features,
+                    metadata=labels.data.cpu().numpy(),
+                    label_img=inputs,
+                    global_step=current_step,
+                    tag="Features",
+                )
+                self.writer.close()
 
     def _save_model(self, model, optimizer, scheduler, epoch, path):
         torch.save(

@@ -7,7 +7,7 @@ from utils import (
     get_m_s,
     norm,
     get_optim,
-    Loss,
+    Loss
 )
 from attack_methods import pgd
 from tqdm import tqdm

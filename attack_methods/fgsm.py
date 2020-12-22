@@ -32,7 +32,6 @@ class FGSM(Attack):
         loss.backward()
 
         grad = imgs.grad.data
-        print(grad==grad_)
 
         adv_imgs = imgs+(self.eps*grad.sign())
         adv_imgs = torch.clamp(adv_imgs, 0, 1)

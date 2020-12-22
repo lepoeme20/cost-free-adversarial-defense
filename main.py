@@ -1,6 +1,7 @@
 """Main module
 2020.08.18
 """
+import os
 import torch
 import config
 import numpy as np
@@ -13,6 +14,8 @@ def main():
     if args.device != 'cpu':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+        # os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(x) for x in args.device_ids)
+
     seed_dict = {
         'v0': 0,
         'v1': 100,

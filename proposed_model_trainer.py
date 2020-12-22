@@ -22,14 +22,7 @@ class ProposedTrainer:
         # get mean and std for normalization
         self.m, self.s = get_m_s(args)
 
-        # check adversarial training
-        if args.adv_train:
-            root_path = os.path.join(args.save_path, "w_adv_training")
-        else:
-            root_path = os.path.join(args.save_path, "wo_adv_training")
-
-        save_path = os.path.join(root_path, args.dataset)
-        self.save_path = os.path.join(save_path, args.v)
+        self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
         # set criterion
@@ -63,6 +56,9 @@ class ProposedTrainer:
         # ablation study
         model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
         # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
+        if args.adv_train:
+            _model_name = model_name.split('.')[0]
+            model_name = f"{_model_name}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))

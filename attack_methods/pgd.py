@@ -19,7 +19,7 @@ class PGD(Attack):
     def __init__(self, target_cls, args):
         super(PGD, self).__init__("PGD", target_cls)
         self.eps = args.eps
-        self.alpha = args.eps/4
+        self.alpha = 2/255
         self.n_iters = args.pgd_iters
         self.random_start = args.pgd_random_start
         self.criterion = nn.CrossEntropyLoss()
@@ -28,20 +28,22 @@ class PGD(Attack):
     def forward(self, imgs, labels, norm_fn, m, s):
         imgs = imgs.to(self.args.device)
         labels = labels.to(self.args.device)
-        imgs.requires_grad = True
+
+        adv_imgs = imgs.clone().detach()
+        adv_imgs.requires_grad = True
 
         if self.random_start:
-            imgs = imgs + torch.empty_like(imgs).uniform_(-self.eps, self.eps)
-            imgs = torch.clamp(imgs, 0, 1)
+            adv_imgs = adv_imgs + torch.empty_like(adv_imgs).uniform_(-self.eps, self.eps)
+            adv_imgs = torch.clamp(adv_imgs, 0, 1)
 
         for _ in range(self.n_iters):
-            outputs, _, _, _ = self.target_cls(norm_fn(imgs, m, s))
+            outputs, _, _, _ = self.target_cls(norm_fn(adv_imgs, m, s))
             loss = self.criterion(outputs, labels)
 
-            grad = torch.autograd.grad(loss, imgs)[0]
+            grad = torch.autograd.grad(loss, adv_imgs)[0]
 
-            adversarial_examples = imgs + self.alpha*grad.sign()
-            eta = torch.clamp(adversarial_examples - imgs, min=-self.eps, max=self.eps)
-            imgs = torch.clamp(imgs + eta, 0, 1)
+            adv_imgs = adv_imgs + self.alpha*grad.sign()
+            eta = torch.clamp(adv_imgs - imgs, min=-self.eps, max=self.eps)
+            adv_imgs = torch.clamp(imgs + eta, 0, 1)
 
-        return imgs, labels
+        return adv_imgs.detach(), labels

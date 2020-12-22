@@ -30,7 +30,7 @@ class Test:
         self.model_path = {
             "pretrained_model": os.path.join(model_path, "pretrained_model.pt"),
             # "proposed_model": os.path.join(model_path, "proposed_model.pt"),
-            "proposed_model": os.path.join(model_path, f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt")
+            "proposed_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt")
         }
 
     def load_model(self, model, load_path):

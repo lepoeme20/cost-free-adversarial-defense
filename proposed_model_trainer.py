@@ -23,7 +23,7 @@ class ProposedTrainer:
         self.m, self.s = get_m_s(args)
 
         # check adversarial training
-        if args.adv_training:
+        if args.adv_train:
             root_path = os.path.join(args.save_path, "w_adv_training")
         else:
             root_path = os.path.join(args.save_path, "wo_adv_training")
@@ -49,6 +49,9 @@ class ProposedTrainer:
         pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
         checkpoint = torch.load(pretrained_path)
         model.module.load_state_dict(checkpoint["model_state_dict"])
+
+        if args.adv_train:
+            attacker = pgd(model, args)
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(model, args.lr)
@@ -88,6 +91,10 @@ class ProposedTrainer:
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
+                if args.adv_train:
+                    adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
+                    inputs = torch.cat((inputs, adv_imgs), 0)
+                    labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
                 # features: 256d
@@ -132,6 +139,10 @@ class ProposedTrainer:
                 model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
+                if args.adv_train:
+                    adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
+                    inputs = torch.cat((inputs, adv_imgs), 0)
+                    lables = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
@@ -175,24 +186,3 @@ class ProposedTrainer:
             path,
         )
 
-
-# for Adversarial Training
-#    def _get_adv_imgs(self, args, model, imgs, labels):
-#        # get pgd attack module
-#        attack_module = globals()['pgd']
-#        attack_func = getattr(attack_module, "PGD")
-#        attacker = attack_func(model, args)
-#        # get adversarial images
-#
-#        adv_imgs, adv_labels = attacker.training(imgs, labels, self.m, self.s)
-#        adv_imgs = adv_imgs.detach()
-#        imgs = torch.cat((imgs, adv_imgs), dim=0)
-#        labels = torch.cat((labels, adv_labels), dim=0)
-#
-#        # shuffle
-#        shuffle_idx = torch.randperm(labels.size(0)).to(labels.device)
-#        imgs = imgs[shuffle_idx, ...]
-#        labels = labels[shuffle_idx, ...]
-#        model.train()
-#
-#        return imgs, labels

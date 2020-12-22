@@ -49,7 +49,6 @@ class Attack(object):
 
         for step, (imgs, labels) in enumerate(data_loader):
             adv_imgs, labels = self.__call__(imgs, labels, self.norm, m, s)
-            adv_imgs = adv_imgs.detach()
             adv_imgs = self.norm(adv_imgs, m, s)
             adv_list.append(adv_imgs.cpu())
             label_list.append(labels.cpu())

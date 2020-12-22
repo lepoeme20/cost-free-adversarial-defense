@@ -29,7 +29,7 @@ class ProposedTrainer:
         self.criterion_CE = nn.CrossEntropyLoss()
         # self.criterion = Loss(args.num_class, 256, args.device)
         # Ablation study
-        self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p)
+        self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p, args.adv_train)
 
         # set logger path
         log_num = 0
@@ -40,10 +40,11 @@ class ProposedTrainer:
     def training(self, args):
         model = self.model
         pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
-        checkpoint = torch.load(pretrained_path)
+        checkpoint = torch.load(pretrained_path)# , map_location=f"cuda:{args.device_ids[0]}")
         model.module.load_state_dict(checkpoint["model_state_dict"])
 
         if args.adv_train:
+            print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
             attacker = attack_func(model, args)
 
@@ -139,7 +140,7 @@ class ProposedTrainer:
                 if args.adv_train:
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)
-                    lables = torch.cat((labels, adv_labels))
+                    labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():

@@ -30,6 +30,12 @@ class ProposedTrainer:
         # self.criterion = Loss(args.num_class, 256, args.device)
         # Ablation study
         self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p, args.adv_train)
+        if args.adv_train:
+            self.lr = 0.01
+            self.lr_proposed =0.005
+        else:
+            self.lr = args.lr
+            self.lr_proposed = args.lr_proposed
 
         # set logger path
         log_num = 0
@@ -39,12 +45,12 @@ class ProposedTrainer:
 
     def training(self, args):
         model = self.model
-        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=0.01)
+        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=self.lr_proposed)
         if args.adv_train:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
             # model_name = 'proposed_model_adv.pt'
-            model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_adv.pt"
+            model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
             pretrained_path = os.path.join(self.save_path, model_name)
             optimizer_proposed.load_state_dict(torch.load(pretrained_path)["optimizer_proposed_state_dict"])
         else:
@@ -56,7 +62,7 @@ class ProposedTrainer:
         model.module.load_state_dict(checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
-        optimizer, scheduler = get_optim(model, args.lr)
+        optimizer, scheduler = get_optim(model, self.lr)
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         # base model
@@ -66,7 +72,7 @@ class ProposedTrainer:
         # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
         if args.adv_train:
             _model_name = model_name.split('.')[0]
-            model_name = f"{_model_name}_adv_train.pt"
+            model_name = f"{_model_name}_adv_train_from_proposed.pt"
         model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))

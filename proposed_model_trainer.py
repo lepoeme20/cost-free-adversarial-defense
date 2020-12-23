@@ -150,9 +150,6 @@ class ProposedTrainer:
                         self.writer.add_scalar("dev/loss", loss.item(), dev_step)
                         self.writer.close()
 
-            scheduler.step(dev_loss)
-            outer.update(1)
-
             if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
@@ -191,3 +188,5 @@ class ProposedTrainer:
                 )
                 self.writer.close()
 
+            scheduler.step(dev_loss)
+            outer.update(1)

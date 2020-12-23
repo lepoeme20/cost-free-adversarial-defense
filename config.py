@@ -78,6 +78,9 @@ def parser_setting(parser):
         '--lr', type=float, default=0.1, metavar='LR', help='learning rate (default: auto)'
         )
     opt_args.add_argument(
+        '--lr-proposed', type=float, default=0.5, help='proposed center lr'
+    )
+    opt_args.add_argument(
         '--b1', type=float, default=0.5, help='momentum (default: 0.9)'
         )
     opt_args.add_argument(

@@ -126,7 +126,10 @@ class Loss(nn.Module):
     def __init__(self, num_class, feature_dim, device, intra_p, inter_p, adv_train):
         super(Loss, self).__init__()
         self.num_class = num_class
-        self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
+        if adv_train:
+            self.center = nn.Parameter(torch.zeros((num_class, features_dim), device=deivce))
+        else:
+            self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
         self.intra_p = intra_p if intra_p != 0 else float("Inf")
         self.inter_p = inter_p if inter_p != 0 else float("Inf")
         self.adv_train = adv_train

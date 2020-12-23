@@ -44,9 +44,9 @@ class ProposedTrainer:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
             # model_name = 'proposed_model_adv.pt'
-            # model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_adv.pt"
-            # pretrained_path = os.path.join(self.save_path, model_name)
-            # optimizer_proposed.load_state_dict(torch.load(pretrained_path)["optimizer_proposed_state_dict"])
+            model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_adv.pt"
+            pretrained_path = os.path.join(self.save_path, model_name)
+            optimizer_proposed.load_state_dict(torch.load(pretrained_path)["optimizer_proposed_state_dict"])
         else:
             pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
 

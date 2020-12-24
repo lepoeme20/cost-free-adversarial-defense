@@ -3,6 +3,7 @@
 """
 import torch
 import torch.nn as nn
+import numpy as np
 from attacks import Attack
 
 class PGD(Attack):
@@ -26,6 +27,9 @@ class PGD(Attack):
         self.args = args
 
     def forward(self, imgs, labels, norm_fn, m, s):
+        if self.args.adv_train:
+            self.eps = np.random.uniform(0.02,0.05)
+
         imgs = imgs.to(self.args.device)
         labels = labels.to(self.args.device)
 

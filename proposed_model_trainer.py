@@ -30,12 +30,6 @@ class ProposedTrainer:
         # self.criterion = Loss(args.num_class, 256, args.device)
         # Ablation study
         self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p, args.adv_train)
-        if args.adv_train:
-            self.lr = 0.01
-            self.lr_proposed =0.005
-        else:
-            self.lr = args.lr
-            self.lr_proposed = args.lr_proposed
 
         # set logger path
         log_num = 0
@@ -45,25 +39,23 @@ class ProposedTrainer:
 
     def training(self, args):
         model = self.model
-        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=self.lr_proposed)
         if args.adv_train:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
-            # model_name = 'proposed_model_adv.pt'
-            model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
-            pretrained_path = os.path.join(self.save_path, model_name)
-            optimizer_proposed.load_state_dict(torch.load(pretrained_path)["optimizer_proposed_state_dict"])
         else:
             pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
 
         # load the model weights
-        pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
         checkpoint = torch.load(pretrained_path)#, map_location=f"cuda:{args.device_ids[0]}")
         model.module.load_state_dict(checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(model, self.lr)
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=self.lr_proposed)
+        scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer_proposed, mode="min", factor=0.1, patience=20
+        )
 
         # base model
         # model_name = f"proposed_model.pt"
@@ -176,8 +168,8 @@ class ProposedTrainer:
             self.writer.add_scalar(
                 "train/loss", loss.item(), global_step=current_step
             )
+            self.writer.close()
             if epoch % 10 == 0:
-                self.writer.close()
                 self.writer.add_embedding(
                     center,
                     metadata=list(range(0, args.num_class)),
@@ -195,4 +187,5 @@ class ProposedTrainer:
                 self.writer.close()
 
             scheduler.step(dev_loss)
+            scheduler_proposed.step(dev_loss)
             outer.update(1)

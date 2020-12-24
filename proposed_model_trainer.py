@@ -43,9 +43,8 @@ class ProposedTrainer:
         if args.adv_train:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
-        else:
-            pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
 
+        pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
         # load the model weights
         checkpoint = torch.load(pretrained_path)#, map_location=f"cuda:{args.device_ids[0]}")
         model.module.load_state_dict(checkpoint["model_state_dict"])

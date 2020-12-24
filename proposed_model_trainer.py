@@ -1,5 +1,5 @@
-import os
-import torch
+    import os
+    import torch
 import torch.nn as nn
 import torch.optim as optim
 from utils import network_initialization, get_dataloader
@@ -35,12 +35,13 @@ class ProposedTrainer:
         # set logger path
         log_num = 0
         if args.adv_train:
-            logging_path = f"logger/proposed/{args.dataset}/adv_train/v{str(log_num)}"
+            while os.path.exists(f"logger/proposed/{args.dataset}/adv_train/v{str(log_num)}"):
+                log_num += 1
+            self.writer = SummaryWriter(f"logger/proposed/{args.dataset}/adv_train/v{str(log_num)}")
         else:
-            logging_path = f"logger/proposed/{args.dataset}/v{str(log_num)}"
-        while os.path.exists(logging_path):
-            log_num += 1
-        self.writer = SummaryWriter(logging_path)
+            while os.path.exists(f"logger/proposed/{args.dataset}/v{str(log_num)}"):
+                log_num += 1
+            self.writer = SummaryWriter(f"logger/proposed/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
         model = self.model

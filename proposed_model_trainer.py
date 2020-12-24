@@ -10,7 +10,7 @@ from utils import (
     get_optim,
     Loss
 )
-from attack_methods import pgd
+from attack_methods import pgd, fgsm
 from tqdm import tqdm
 
 
@@ -34,9 +34,13 @@ class ProposedTrainer:
 
         # set logger path
         log_num = 0
-        while os.path.exists(f"logger/proposed/v{str(log_num)}"):
+        if args.adv_train:
+            logging_path = f"logger/proposed/{args.dataset}/adv_train/v{str(log_num)}"
+        else:
+            logging_path = f"logger/proposed/{args.dataset}/v{str(log_num)}"
+        while os.path.exists(logging_path):
             log_num += 1
-        self.writer = SummaryWriter(f"logger/proposed/v{str(log_num)}")
+        self.writer = SummaryWriter(logging_path)
 
     def training(self, args):
         model = self.model
@@ -167,6 +171,15 @@ class ProposedTrainer:
             # tensorboard logging
             self.writer.add_scalar(
                 "train/loss", loss.item(), global_step=current_step
+            )
+            self.writer.add_scalar(
+                "train/ce_loss", ce_loss.item(), global_step=current_step
+            )
+            self.writer.add_scalar(
+                "train/intra_loss", intra_loss.item(), global_step=current_step
+            )
+            self.writer.add_scalar(
+                "train/inter_loss", inter_loss.item(), global_step=current_step
             )
             self.writer.close()
             if epoch % 10 == 0:

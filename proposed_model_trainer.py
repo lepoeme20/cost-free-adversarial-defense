@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+import torch.optim as optim
 from utils import network_initialization, get_dataloader
 from torch.utils.tensorboard import SummaryWriter
 from utils import (
@@ -50,9 +51,9 @@ class ProposedTrainer:
         model.module.load_state_dict(checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
-        optimizer, scheduler = get_optim(model, self.lr)
+        optimizer, scheduler = get_optim(model, args.lr)
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=self.lr_proposed)
+        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=args.lr_proposed)
         scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer_proposed, mode="min", factor=0.1, patience=20
         )

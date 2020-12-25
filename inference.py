@@ -25,9 +25,9 @@ class Test:
         self.model_path = {
             "pretrained_model": os.path.join(model_path, "pretrained_model.pt"),
             # "proposed_model": os.path.join(model_path, "proposed_model.pt"),
-            "proposed_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt")
-            # "proposed_adv_model": os.path.join(model_path, "proposed_model_adv_train.pt")
-            "proposed_adv_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_adv_train.pt")
+            "proposed_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"),
+            # "proposed_adv_model": os.path.join(model_path, "proposed_model_adv_train.pt"),
+            "proposed_adv_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_adv_train.pt"),
         }
 
     def load_model(self, model, load_path):

@@ -1,5 +1,5 @@
-    import os
-    import torch
+import os
+import torch
 import torch.nn as nn
 import torch.optim as optim
 from utils import network_initialization, get_dataloader

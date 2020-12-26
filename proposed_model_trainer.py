@@ -69,7 +69,7 @@ class ProposedTrainer:
         # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
         if args.adv_train:
             _model_name = model_name.split('.')[0]
-            model_name = f"{_model_name}_adv_train_from_proposed.pt"
+            model_name = f"{_model_name}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
@@ -77,12 +77,6 @@ class ProposedTrainer:
         best_loss = 1000
         current_step = 0
         dev_step = 0
-        center = torch.rand(
-            size=(args.num_class, 256),
-            dtype=torch.float32,
-            device=args.device,
-            requires_grad=False,
-        )
 
         trn_loss_log = tqdm(total=0, position=2, bar_format='{desc}')
         dev_loss_log = tqdm(total=0, position=4, bar_format='{desc}')
@@ -108,7 +102,7 @@ class ProposedTrainer:
                 # features: 256d
                 logit, _, features, _ = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                intra_loss, inter_loss = self.criterion(features, labels)
+                intra_loss, inter_loss, center = self.criterion(features, labels)
                 #TODO: Ablation study about lambda
                 loss = ce_loss + args.lambda_intra*intra_loss + args.lambda_inter*inter_loss
 
@@ -136,7 +130,7 @@ class ProposedTrainer:
                 with torch.no_grad():
                     logit, _, features, _ = model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    intra_loss, inter_loss = self.criterion(features, labels)
+                    intra_loss, inter_loss, center = self.criterion(features, labels)
                     loss = ce_loss + intra_loss + inter_loss
 
                     # Loss
@@ -161,9 +155,11 @@ class ProposedTrainer:
                 torch.save(
                     {
                         "model_state_dict": model.module.state_dict(),
+                        "center_state_dict": self.criterion.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
                         "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
+                        "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
                         "trained_epoch": epoch
                     },
                     model_path

@@ -3,3 +3,5 @@ Adv_examples
 logger
 bestmodel
 .vscode
+train.sh
+inference.sh

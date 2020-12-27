@@ -68,8 +68,7 @@ class ProposedTrainer:
         model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
         # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
         if args.adv_train:
-            _model_name = model_name.split('.')[0]
-            model_name = f"{_model_name}_adv_train_from_proposed.pt"
+            model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
@@ -203,3 +202,16 @@ class ProposedTrainer:
             scheduler.step(dev_loss)
             scheduler_proposed.step(dev_loss)
             outer.update(1)
+        save_last_path = f"{model_path.split('.')[0]}_last.pt"
+        torch.save(
+            {
+                "model_state_dict": model.module.state_dict(),
+                "center_state_dict": self.criterion.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
+                "trained_epoch": epoch
+            },
+            save_last_path
+        )

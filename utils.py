@@ -134,7 +134,7 @@ class Loss(nn.Module):
     def forward(self, features, labels):
         intra_loss = self.intra_loss(features, labels)
         inter_loss = self.inter_loss(features, labels)
-        return intra_loss, inter_loss
+        return intra_loss, inter_loss, self.center
 
     def intra_loss(self, features, labels):
         batch_size = features.size(0)
@@ -158,7 +158,7 @@ class Loss(nn.Module):
         center = self.center.scatter_add(0, labels.unsqueeze(1).repeat(1, features.size(-1)), features)
         counts = torch.scatter_add(
             count_input, 0, labels.unsqueeze(1), torch.ones_like(features)
-    )
+        )
         center /= counts.clamp(min=1)
 
         dist_mat = torch.cdist(center, center, p=self.intra_p) #float("Inf")

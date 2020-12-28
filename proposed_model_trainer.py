@@ -82,10 +82,17 @@ class ProposedTrainer:
         best_epoch_log = tqdm(total=0, position=5, bar_format='{desc}')
         outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
         # Train target classifier
+        original_lambda_intra = args.lambda_intra
         for epoch in range(args.epochs):
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
+            if args.dataset=='cifar100' and epoch < 300:
+                args.lambda_intra = 1
+                args.lambda_inter = 20
+            else:
+                args.lambda_intra = original_lambda_intra
+                args.lambda_inter = 1
             for step, (inputs, labels) in enumerate(self.train_loader):
                 model.train()
                 current_step += 1
@@ -198,6 +205,8 @@ class ProposedTrainer:
             scheduler.step(dev_loss)
             scheduler_proposed.step(dev_loss)
             outer.update(1)
+
+        # save the last epoch model
         save_last_path = f"{model_path.split('.')[0]}_last.pt"
         torch.save(
             {

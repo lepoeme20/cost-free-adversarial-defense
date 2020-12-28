@@ -168,6 +168,7 @@ class Loss(nn.Module):
         for class_idx in combi:
             i, j = class_idx
             dist = dist_mat[i][j] * 2
+            dist = dist.clamp(min=1e-12, max=1e12)
             dist = torch.reciprocal(dist)
             total_dist.append(dist)
         # dist = torch.cat(total_dist)

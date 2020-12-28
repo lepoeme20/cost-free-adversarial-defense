@@ -167,7 +167,7 @@ class ResNet(nn.Module):
         # y = self.fcf(x)           # num_classes dimensional
 
         # return y, m, z, x
-        return z, z, z, x
+        return x, x, z, z
 
 def resnet(num_classes):
     """

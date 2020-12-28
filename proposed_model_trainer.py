@@ -117,6 +117,22 @@ class ProposedTrainer:
                 )
                 train.update(1)
 
+            if epoch % 10 == 0:
+                self.writer.add_embedding(
+                    center,
+                    metadata=list(range(0, args.num_class)),
+                    global_step=current_step,
+                    tag="[TRN]Centers",
+                )
+                self.writer.add_embedding(
+                    features,
+                    metadata=labels.data.cpu().numpy(),
+                    label_img=inputs,
+                    global_step=current_step,
+                    tag="[TRN]Features",
+                )
+                self.writer.close()
+
             for idx, (inputs, labels) in enumerate(self.dev_loader):
                 model.eval()
                 dev_step += 1
@@ -147,22 +163,6 @@ class ProposedTrainer:
                         self.writer.add_scalar("dev/loss", loss.item(), dev_step)
                         self.writer.close()
 
-            if epoch % 10 == 0:
-                self.writer.add_embedding(
-                    center,
-                    metadata=list(range(0, args.num_class)),
-                    global_step=current_step,
-                    tag="[TRN]Centers",
-                )
-                self.writer.close()
-                self.writer.add_embedding(
-                    features,
-                    metadata=labels.data.cpu().numpy(),
-                    label_img=inputs,
-                    global_step=current_step,
-                    tag="[TRN]Features",
-                )
-                self.writer.close()
             if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"

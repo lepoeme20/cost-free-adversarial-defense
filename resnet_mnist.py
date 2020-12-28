@@ -103,7 +103,7 @@ class ResNet(nn.Module):
         features = x.view(x.size(0), -1)
         x = self.fc(features)
 
-        return x, features
+        return x, x, features, x
 
 def resnet_mnist():
     return ResNet(BasicBlock, [2, 2, 2, 2])

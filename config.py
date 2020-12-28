@@ -165,7 +165,7 @@ def get_config():
     args.device = torch.device(f'cuda:{args.device_ids[0]}' if torch.cuda.is_available else 'cpu')
 
     # input channels
-    args.rgb = 1 if args.dataset == 'mnist' else 3
+    args.rgb = 1 if 'mnist' in args.dataset else 3
 
     # number of input classes
     # CelebA: Female/Male

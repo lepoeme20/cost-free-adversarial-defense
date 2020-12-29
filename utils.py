@@ -5,13 +5,13 @@ import torch.optim as optim
 import torchvision
 from torchvision import transforms
 from resnet110 import resnet
-from resnet_mnist import resnet_mnist
+from smallnet import smallnet
 import torch.nn.functional as F
 
 
 def network_initialization(args):
     if args.rgb == 1:
-        net = resnet_mnist()
+        net = smallnet()
     else:
         block = 'BasicBlock' if args.dataset == 'cifar100' else 'Bottleneck'
         net = resnet(args.num_class, block=block)

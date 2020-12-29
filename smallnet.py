@@ -26,7 +26,8 @@ class ConvNet(nn.Module):
 
         self.fc1 = nn.Linear(128, 512)
         # self.prelu_fc1 = nn.PReLU()
-        self.fc2 = nn.Linear(512, num_classes)
+        self.fc2 = nn.Linear(512, 64)
+        self.fc3 = nn.Linear(64, num_classes)
 
     def forward(self, x):
         x = self.prelu1_1(self.conv1_1(x))
@@ -43,7 +44,8 @@ class ConvNet(nn.Module):
         x = self.avgpool(x)
         feature = x.view(x.size(0), -1)
         x = self.fc1(feature)
-        out = self.fc2(x)
+        x = self.fc2(x)
+        out = self.fc3(x)
 
         return out, None, feature, None
 

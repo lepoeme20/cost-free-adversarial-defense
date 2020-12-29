@@ -60,10 +60,10 @@ class Bottleneck(nn.Module):
         super(Bottleneck, self).__init__()
         self.conv1 = conv1x1(inplanes, planes)
         self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = conv3x3(planes, planes)
+        self.conv2 = conv3x3(planes, planes, stride)
         self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = conv1x1(planes, planes * expansion)
-        self.bn3 = nn.BatchNorm2d(planes * expansion)
+        self.conv3 = conv1x1(planes, planes * 4)
+        self.bn3 = nn.BatchNorm2d(planes * 4)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
@@ -95,24 +95,26 @@ class ResNet(nn.Module):
     def __init__(self, depth=110, block_name='BasicBlock', num_classes=100):
         super(ResNet, self).__init__()
         if block_name.lower() == 'basicblock':
+            self.inplanes = 64
+            out_ch = [64, 128, 256]
             assert (depth - 2) % 6 == 0, 'When use basicblock, depth should be 6n+2, e.g. 20, 32, 44, 56, 110, 1202'
             n = (depth - 2) // 6
             block = BasicBlock
         elif block_name.lower() == 'bottleneck':
+            self.inplanes = 16
+            out_ch = [16, 32, 64]
             assert (depth - 2) % 9 == 0, 'When use bottleneck, depth should be 9n+2, e.g. 20, 29, 47, 56, 110, 1199'
             n = (depth - 2) // 9
             block = Bottleneck
         else:
             raise ValueError('block_name shoule be Basicblock or Bottleneck')
-
-        self.inplanes = 64
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1,
+        self.conv1 = nn.Conv2d(3, out_ch[0], kernel_size=3, padding=1,
                                bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.bn1 = nn.BatchNorm2d(out_ch[0])
         self.relu = nn.ReLU(inplace=True)
-        self.layer1 = self._make_layer(block, 64, n)
-        self.layer2 = self._make_layer(block, 128, n, stride=2)
-        self.layer3 = self._make_layer(block, 256, n, stride=2)
+        self.layer1 = self._make_layer(block, out_ch[0], n)
+        self.layer2 = self._make_layer(block, out_ch[1], n, stride=2)
+        self.layer3 = self._make_layer(block, out_ch[2], n, stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
         self.fc = nn.Linear(256, num_classes)
@@ -169,9 +171,9 @@ class ResNet(nn.Module):
         # return y, m, z, x
         return x, x, z, z
 
-def resnet(num_classes):
+def resnet(num_classes, block='BasicBlock'):
     """
     Constructs a ResNet model.
     """
-    return ResNet(num_classes=num_classes)
+    return ResNet(num_classes=num_classes, block_name=block)
 

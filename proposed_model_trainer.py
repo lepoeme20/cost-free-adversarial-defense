@@ -58,14 +58,18 @@ class ProposedTrainer:
         optimizer, scheduler = get_optim(model, args.lr)
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=args.lr_proposed)
-        scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer_proposed, mode="min", factor=0.1, patience=20
+        # scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
+        #     optimizer_proposed, mode="min", factor=0.1, patience=20
+        # )
+        t_max = len(self.train_loader)
+        scheduler_proposed = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_proposed, T_max=t_max
         )
 
         # base model
         # model_name = f"proposed_model.pt"
         # ablation study
-        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
+        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_cosine.pt"
         # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
@@ -82,7 +86,6 @@ class ProposedTrainer:
         best_epoch_log = tqdm(total=0, position=5, bar_format='{desc}')
         outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
         # Train target classifier
-        original_lambda_intra = args.lambda_intra
         for epoch in range(args.epochs):
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
@@ -213,8 +216,14 @@ class ProposedTrainer:
                 self.writer.close()
 
             scheduler.step(dev_loss)
-            scheduler_proposed.step(dev_loss)
+            # scheduler_proposed.step(dev_loss)
+            scheduler_proposed.step()
             outer.update(1)
+
+        t_max *= 2
+        scheduler_proposed = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_proposed, T_max=t_max
+        )
 
         # save the last epoch model
         save_last_path = f"{model_path.split('.')[0]}_last.pt"

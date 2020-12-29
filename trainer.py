@@ -22,7 +22,10 @@ class Trainer():
         self.criterion_CE = nn.CrossEntropyLoss()
 
         # set logger path
-        self.writer = SummaryWriter('logger/ce_loss')
+        log_num = 0
+        while os.path.exists(f"logger/ce_loss/{args.dataset}/v{str(log_num)}"):
+            log_num += 1
+        self.writer = SummaryWriter(f'logger/ce_loss/{args.dataset}/v{str(log_num)}')
 
     def training(self, args):
         model = self.model

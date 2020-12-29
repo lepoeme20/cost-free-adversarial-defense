@@ -13,7 +13,8 @@ def network_initialization(args):
     if args.rgb == 1:
         net = resnet_mnist()
     else:
-        net = resnet(args.num_class)
+        block = 'BasicBlock' if args.dataset == 'cifar100' else 'Bottleneck'
+        net = resnet(args.num_class, block=block)
 
     # Using multi GPUs if you have
     if torch.cuda.device_count() > 0:

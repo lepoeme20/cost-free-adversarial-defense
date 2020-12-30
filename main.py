@@ -3,6 +3,7 @@
 """
 import os
 import torch
+import random
 import config
 import numpy as np
 from trainer import Trainer
@@ -23,8 +24,11 @@ def main():
         'v3': 300,
         'v4': 400
     }
-    torch.manual_seed(seed_dict[args.v])
+    random.seed(seed_dict[args.v])
     np.random.seed(seed_dict[args.v])
+    torch.manual_seed(seed_dict[args.v])
+    torch.cuda.manual_seed(seed_dict[args.v])
+    torch.cuda.manual_seed_all(seed_dict[args.v])
     if not args.proposed:
         trainer = Trainer(args)
     else:

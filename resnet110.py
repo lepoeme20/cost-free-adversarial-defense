@@ -118,7 +118,8 @@ class ResNet(nn.Module):
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.avgpool = nn.AvgPool2d(8)
 
-        self.fc = nn.Linear(256, num_classes)
+        self.fc1 = nn.Linear(256, 1024)
+        self.fc2 = nn.Linear(1024, num_classes)
         # baseline
         # self.fc = nn.Linear(64 * block.expansion, 1024)
         # self.fcf = nn.Linear(1024, num_classes)
@@ -165,12 +166,13 @@ class ResNet(nn.Module):
         x = self.layer3(x)
 
         x = self.avgpool(x)
-        z = x.view(x.size(0), -1) # 256 dimensional
-        x = self.fc(z)            # 1024 dimensional
+        feature = x.view(x.size(0), -1) # 256 dimensional
+        x = self.fc1(feature)            # 1024 dimensional
+        out = self.fc2(x)
         # y = self.fcf(x)           # num_classes dimensional
 
         # return y, m, z, x
-        return x, x, z, z
+        return x, None, feature, None
 
 def resnet(num_classes, block='BasicBlock'):
     """

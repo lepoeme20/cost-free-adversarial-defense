@@ -28,8 +28,6 @@ class ProposedTrainer:
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        # self.criterion = Loss(args.num_class, 256, args.device)
-        # Ablation study
         self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p, args.adv_train)
 
         # set logger path
@@ -55,24 +53,15 @@ class ProposedTrainer:
         model.module.load_state_dict(checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
-        optimizer, scheduler = get_optim(model, args.lr)
+        optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
+            model, args.lr, self.criterion, args.lr_proposed, args.dataset, len(self.train_loader)
+        )
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        optimizer_proposed = torch.optim.SGD(self.criterion.parameters(), lr=args.lr_proposed)
-
-        if args.dataset != 'cifar100':
-            scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer_proposed, mode="min", factor=0.1, patience=20
-            )
-        else:
-            t_max = len(self.train_loader)
-            scheduler_proposed = optim.lr_scheduler.CosineAnnealingLR(
-                optimizer_proposed, T_max=t_max
-            )
 
         # base model
         # model_name = f"proposed_model.pt"
         # ablation study
-        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
+        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_normal.pt"
         # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
@@ -218,15 +207,19 @@ class ProposedTrainer:
                 )
                 self.writer.close()
 
-            scheduler.step(dev_loss)
             if args.dataset != 'cifar100':
+                scheduler.step(dev_loss)
                 scheduler_proposed.step(dev_loss)
             else:
+                scheduler.step()
                 scheduler_proposed.step()
             outer.update(1)
 
         if args.dataset == 'cifar100':
             t_max *= 2
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=t_max
+            )
             scheduler_proposed = optim.lr_scheduler.CosineAnnealingLR(
                 optimizer_proposed, T_max=t_max
             )

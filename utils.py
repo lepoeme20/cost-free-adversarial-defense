@@ -87,12 +87,24 @@ def norm(tensor, m, s):
     return output
 
 
-def get_optim(model, lr):
+def get_optim(model, lr, criterion, proposed_lr, dataset, t_max=None):
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-3)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.1, patience=20
-    )
-    return optimizer, scheduler
+    optimizer_proposed = optim.SGD(criterion.parameters(), lr=proposed_lr, momentum=0.9, weight_decay=1e-3)
+    if dataset == 'cifar100':
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=t_max
+        )
+        scheduler_proposed = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_proposed, T_max=t_max
+        )
+    else:
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.1, patience=20
+        )
+        scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer_proposed, mode='min', factor=0.1, patience=20
+        )
+    return optimizer, scheduler, optimizer_proposed, scheduler_proposed
 
 
 def __get_transformer(args):

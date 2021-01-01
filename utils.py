@@ -101,7 +101,9 @@ def get_optim(model, lr, criterion=None, proposed_lr=None):
         scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer_proposed, mode='min', factor=0.1, patience=20
         )
-    return optimizer, scheduler, optimizer_proposed, scheduler_proposed
+        return optimizer, scheduler, optimizer_proposed, scheduler_proposed
+    else:
+        return optimizer, scheduler
 
 
 def __get_transformer(args):

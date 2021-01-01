@@ -31,7 +31,7 @@ class Trainer():
         model = self.model
 
         # set optimizer & scheduler
-        optimizer, scheduler = get_optim(model, args.lr)
+        optimizer, scheduler, _, _ = get_optim(model, args.lr)
 
         model_path = os.path.join(self.save_path, "pretrained_model.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))

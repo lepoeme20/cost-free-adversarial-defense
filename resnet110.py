@@ -26,10 +26,14 @@ class BasicBlock(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(BasicBlock, self).__init__()
-        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.conv1 = nn.Conv2d(
+            inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes)
+        self.conv2 = nn.Conv2d(
+            planes, planes, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.bn2 = nn.BatchNorm2d(planes)
         self.downsample = downsample
         self.stride = stride
@@ -58,11 +62,17 @@ class Bottleneck(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
-        self.conv1 = conv1x1(inplanes, planes)
+        self.conv1 = nn.Conv2d(
+            inplanes, planes, kernel_size=1, bias=False
+        )
         self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = conv3x3(planes, planes, stride)
+        self.conv2 = nn.Conv2d(
+            planes, planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
         self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = conv1x1(planes, planes * 4)
+        self.conv3 = nn.Conv2d(
+            planes, planes * 4, kernel_size=1, bias=False
+        )
         self.bn3 = nn.BatchNorm2d(planes * 4)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
@@ -120,6 +130,9 @@ class ResNet(nn.Module):
 
         self.fc1 = nn.Linear(256, 1024)
         self.fc2 = nn.Linear(1024, num_classes)
+        # self.fc2 = nn.Linear(1024, 512)
+        # self.fc3 = nn.Linear(512, num_classes)
+
         # baseline
         # self.fc = nn.Linear(64 * block.expansion, 1024)
         # self.fcf = nn.Linear(1024, num_classes)
@@ -169,10 +182,11 @@ class ResNet(nn.Module):
         feature = x.view(x.size(0), -1) # 256 dimensional
         x = self.fc1(feature)            # 1024 dimensional
         out = self.fc2(x)
+        # out = self.fc3(x)
         # y = self.fcf(x)           # num_classes dimensional
 
         # return y, m, z, x
-        return x, None, feature, None
+        return out, None, feature, None
 
 def resnet(num_classes, block='BasicBlock'):
     """

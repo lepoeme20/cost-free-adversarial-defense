@@ -54,14 +54,14 @@ class ProposedTrainer:
 
         # set optimizer & scheduler
         optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
-            model, args.lr, self.criterion, args.lr_proposed, args.dataset, len(self.train_loader)
+            model, args.lr, self.criterion, args.lr_proposed
         )
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         # base model
         # model_name = f"proposed_model.pt"
         # ablation study
-        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_normal.pt"
+        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
         # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
@@ -207,22 +207,9 @@ class ProposedTrainer:
                 )
                 self.writer.close()
 
-            if args.dataset != 'cifar100':
-                scheduler.step(dev_loss)
-                scheduler_proposed.step(dev_loss)
-            else:
-                scheduler.step()
-                scheduler_proposed.step()
+            scheduler.step(dev_loss)
+            scheduler_proposed.step(dev_loss)
             outer.update(1)
-
-        if args.dataset == 'cifar100':
-            t_max *= 2
-            scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=t_max
-            )
-            scheduler_proposed = optim.lr_scheduler.CosineAnnealingLR(
-                optimizer_proposed, T_max=t_max
-            )
 
         # save the last epoch model
         save_last_path = f"{model_path.split('.')[0]}_last.pt"

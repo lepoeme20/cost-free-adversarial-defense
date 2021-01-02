@@ -44,9 +44,6 @@ def parser_setting(parser):
     base_args.add_argument(
         "--device-ids", type=int, nargs='*', help="device id"
     )
-    base_args.add_argument(
-        "--network", type=str, default='resnet110' # choices=['resnet34', 'resnet110']
-    )
 
     trn_args = parser.add_argument_group('training hyper params')
     trn_args.add_argument(
@@ -70,7 +67,7 @@ def parser_setting(parser):
         help='input batch size for testing (default: auto)'
         )
     trn_args.add_argument(
-        '--v', type=str, default='v1', help='Experiment version'
+        '--seed', type=int, default=200, help='Seed for reproductibility'
     )
 
     opt_args = parser.add_argument_group('optimizer params')
@@ -142,12 +139,6 @@ def parser_setting(parser):
     )
 
     ablation_args = parser.add_argument_group('Ablation')
-    ablation_args.add_argument(
-        '--intra-p', type=int, choices=[0, 1, 2], help="p norm for intra class"
-    )
-    ablation_args.add_argument(
-        '--inter-p', type=int, choices=[0, 1, 2], help="p norm for inter class"
-    )
     ablation_args.add_argument(
         '--lambda-intra', type=float, default=2., help="Intra loss weight"
     )

@@ -107,13 +107,13 @@ class ResNet(nn.Module):
         if block_name.lower() == 'basicblock':
             self.inplanes = 64
             out_ch = [64, 128, 256]
-            assert (depth - 2) % 6 == 0, 'When use basicblock, depth should be 6n+2, e.g. 20, 32, 44, 56, 110, 1202'
+            assert (depth - 2) % 6 == 0, 'When use basicblock, depth should be 6n+2'
             n = (depth - 2) // 6
             block = BasicBlock
         elif block_name.lower() == 'bottleneck':
             self.inplanes = 16
             out_ch = [16, 32, 64]
-            assert (depth - 2) % 9 == 0, 'When use bottleneck, depth should be 9n+2, e.g. 20, 29, 47, 56, 110, 1199'
+            assert (depth - 2) % 9 == 0, 'When use bottleneck, depth should be 9n+2'
             n = (depth - 2) // 9
             block = Bottleneck
         else:
@@ -125,19 +125,10 @@ class ResNet(nn.Module):
         self.layer1 = self._make_layer(block, out_ch[0], n)
         self.layer2 = self._make_layer(block, out_ch[1], n, stride=2)
         self.layer3 = self._make_layer(block, out_ch[2], n, stride=2)
-        # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.avgpool = nn.AvgPool2d(8)
 
         self.fc1 = nn.Linear(256, 1024)
         self.fc2 = nn.Linear(1024, num_classes)
-        # self.fc2 = nn.Linear(1024, 512)
-        # self.fc3 = nn.Linear(512, num_classes)
-
-        # baseline
-        # self.fc = nn.Linear(64 * block.expansion, 1024)
-        # self.fcf = nn.Linear(1024, num_classes)
-
-        # self.maxpool2 = nn.MaxPool2d(16)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -172,21 +163,14 @@ class ResNet(nn.Module):
 
         x = self.layer1(x)
         x = self.layer2(x)
-
-        # m =  self.maxpool2(x)
-        # m = m.view(m.size(0), -1) # 128 dimensional
-
         x = self.layer3(x)
 
         x = self.avgpool(x)
-        feature = x.view(x.size(0), -1) # 256 dimensional
-        x = self.fc1(feature)            # 1024 dimensional
+        feature = x.view(x.size(0), -1)
+        x = self.fc1(feature)
         out = self.fc2(x)
-        # out = self.fc3(x)
-        # y = self.fcf(x)           # num_classes dimensional
 
-        # return y, m, z, x
-        return out, None, feature, None
+        return out, feature
 
 def resnet(num_classes, block='BasicBlock'):
     """

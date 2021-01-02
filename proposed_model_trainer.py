@@ -47,16 +47,16 @@ class ProposedTrainer:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
 
-        pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
+        # pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
         # load the model weights
-        checkpoint = torch.load(pretrained_path)#, map_location=f"cuda:{args.device_ids[0]}")
-        model.module.load_state_dict(checkpoint["model_state_dict"])
+        # checkpoint = torch.load(pretrained_path)#, map_location=f"cuda:{args.device_ids[0]}")
+        # model.module.load_state_dict(checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
         optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
             model, args.lr, self.criterion, args.lr_proposed
         )
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        # optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         # base model
         model_name = f"proposed_model.pt"

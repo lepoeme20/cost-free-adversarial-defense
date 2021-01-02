@@ -28,7 +28,7 @@ class ProposedTrainer:
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, 256, args.device, args.intra_p, args.inter_p, args.adv_train)
+        self.criterion = Loss(args.num_class, args.dataset, args.device)
 
         # set logger path
         log_num = 0
@@ -59,10 +59,7 @@ class ProposedTrainer:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         # base model
-        # model_name = f"proposed_model.pt"
-        # ablation study
-        model_name = f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"
-        # model_name = f"proposed_model_intra_l_{args.lambda_intra}_inter_l_{args.lambda_inter}.pt"
+        model_name = f"proposed_model.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
@@ -87,6 +84,8 @@ class ProposedTrainer:
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
+                if inputs.size(1) == 1:
+                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
                 if args.adv_train:
                     attacker = attack_func(model, args)
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
@@ -94,11 +93,9 @@ class ProposedTrainer:
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
-                # features: 256d
-                logit, _, features, _ = model(inputs)
+                logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss, inter_loss, center = self.criterion(features, labels)
-                #TODO: Ablation study about lambda
                 loss = ce_loss + args.lambda_intra*intra_loss + args.lambda_inter*inter_loss
 
                 optimizer.zero_grad()
@@ -132,6 +129,8 @@ class ProposedTrainer:
                 model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
+                if inputs.size(1) == 1:
+                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
                 if args.adv_train:
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)
@@ -139,7 +138,7 @@ class ProposedTrainer:
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
-                    logit, _, features, _ = model(inputs)
+                    logit, features = model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
                     intra_loss, inter_loss, center = self.criterion(features, labels)
                     loss = ce_loss + intra_loss + inter_loss

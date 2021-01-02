@@ -2,7 +2,7 @@
 """
 import os
 import torch
-from utils import get_m_s
+from utils import get_m_s, norm
 
 class Attack(object):
     """Base class for attacks
@@ -24,12 +24,6 @@ class Attack(object):
         """
         raise NotImplementedError
 
-    def norm(self, tensor, m, s):
-        output = torch.rand_like(tensor, device=self.device)
-        for c in range(output.size(1)):
-            output[:, c, :, :] = (tensor[:, c, :, :] - m[c])/s[c]
-        return output
-
     def inference(self, args, save_path, file_name, data_loader):
         """[summary]
 
@@ -48,8 +42,12 @@ class Attack(object):
         m, s = get_m_s(args)
 
         for step, (imgs, labels) in enumerate(data_loader):
-            adv_imgs, labels = self.__call__(imgs, labels, self.norm, m, s)
-            adv_imgs = self.norm(adv_imgs, m, s)
+            imgs = imgs.to(args.device)
+            if imgs.size(1) == 1:
+                imgs = imgs.expand(imgs.size(0), 3, imgs.size(2), imgs.size(3))
+            labels = labels.to(args.device)
+            adv_imgs, labels = self.__call__(imgs, labels, norm, m, s)
+            adv_imgs = norm(adv_imgs, m, s)
             adv_list.append(adv_imgs.cpu())
             label_list.append(labels.cpu())
 
@@ -58,7 +56,7 @@ class Attack(object):
             if self.mode.lower() == 'int':
                 adv_imgs = adv_imgs.float()/255.
 
-            outputs, _, _, _ = self.target_cls(adv_imgs)
+            outputs, _ = self.target_cls(adv_imgs)
             _, predicted = torch.max(outputs, 1)
             correct += predicted.eq(labels).sum().item()
 
@@ -78,7 +76,7 @@ class Attack(object):
         torch.save((adversarials, y), save_path)
 
     def training(self, imgs, labels, m, s):
-        adv_imgs, labels = self.__call__(imgs, labels, self.norm, m, s)
+        adv_imgs, labels = self.__call__(imgs, labels, norm, m, s)
         return adv_imgs, labels
 
     def __call__(self, *args):

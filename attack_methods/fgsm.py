@@ -8,13 +8,6 @@ import torch.nn as nn
 from attacks import Attack
 
 class FGSM(Attack):
-    """Reproduce Fast Gradients Sign Method (FGSM)
-    in the paper 'Explaining and harnessing adversarial examples'
-
-    Arguments:
-        target_cls {nn.Module} -- Target classifier to fool
-        eps {float} -- Magnitude of perturbation
-    """
     def __init__(self, target_cls, args):
         super(FGSM, self).__init__("FGSM", target_cls)
         self.eps = args.eps
@@ -22,12 +15,12 @@ class FGSM(Attack):
         self.args = args
 
     def forward(self, imgs, labels, norm_fn, m, s):
-        imgs = imgs.clone().detach().to(self.args.device)
-        labels = labels.to(self.args.device)
+        imgs = imgs.clone().detach()
+        labels = labels
 
         imgs.requires_grad = True
 
-        outputs, _, _, _ = self.target_cls(norm_fn(imgs, m, s))
+        outputs, _ = self.target_cls(norm_fn(imgs, m, s))
         loss = self.criterion(outputs, labels)
         loss.backward()
 

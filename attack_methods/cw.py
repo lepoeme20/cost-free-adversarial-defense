@@ -1,4 +1,7 @@
-"""[summary]
+"""
+C&W
+
+This code is written by Seugnwan Seo
 """
 import torch
 import torch.nn as nn
@@ -18,10 +21,9 @@ class CW(Attack):
         self.device = args.device
 
     def forward(self, imgs, labels, norm_fn, m, s):
-        images = imgs.clone().detach().to(self.device)
-        labels = labels.clone().detach().to(self.device)
+        images = imgs.clone().detach()
+        labels = labels.clone().detach()
 
-        # w = torch.zeros_like(images).detach() # Requires 2x times
         w = self.inverse_tanh_space(images).detach()
         w.requires_grad = True
 
@@ -43,7 +45,7 @@ class CW(Attack):
                                  Flatten(images)).sum(dim=1)
             L2_loss = current_L2.sum()
 
-            outputs, _, _, _ = self.target_cls(norm_fn(adv_images, m, s))
+            outputs, _ = self.target_cls(norm_fn(adv_images, m, s))
             f_Loss = self.f(outputs, labels).sum()
 
             cost = L2_loss + self.c*f_Loss

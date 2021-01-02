@@ -24,10 +24,8 @@ class Test:
         )
         self.model_path = {
             "pretrained_model": os.path.join(model_path, "pretrained_model.pt"),
-            # "proposed_model": os.path.join(model_path, "proposed_model.pt"),
-            "proposed_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}.pt"),
-            # "proposed_adv_model": os.path.join(model_path, "proposed_model_adv_train.pt"),
-            "proposed_adv_model": os.path.join(model_path, f"proposed_model_intra_p_{args.intra_p}_inter_p_{args.inter_p}_adv_train.pt"),
+            "proposed_model": os.path.join(model_path, "proposed_model.pt"),
+            "proposed_adv_model": os.path.join(model_path, "proposed_model_adv_train.pt"),
         }
 
     def load_model(self, model, load_path):
@@ -64,11 +62,12 @@ class Test:
             for step, (inputs, labels) in enumerate(tst_loader, 0):
                 model.eval()
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
+                inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
                 accumulated_num += labels.size(0)
                 inputs = norm(inputs, m, s)
 
                 with torch.no_grad():
-                    outputs, _, _, _ = model(inputs)
+                    outputs, _ = model(inputs)
                     _, predicted = torch.max(outputs, 1)
                     correct += predicted.eq(labels).sum().item()
 

@@ -5,13 +5,13 @@ import torch.optim as optim
 import torchvision
 from torchvision import transforms
 from resnet110 import resnet
-from smallnet import smallnet
+from smallnet import small_resnet
 import torch.nn.functional as F
 
 
 def network_initialization(args):
     if args.rgb == 1:
-        net = smallnet()
+        net = small_resnet()
     else:
         block = 'BasicBlock' if args.dataset == 'cifar100' else 'Bottleneck'
         net = resnet(args.num_class, block=block)
@@ -69,13 +69,13 @@ def __get_loader(args, data_name, transformer):
 
 def get_m_s(args):
     if args.dataset.lower() == "mnist":
-        m, s = [0.1307], [0.3081]
+        m, s = [0.1307, 0.1307, 0.1307], [0.3081, 0.3081, 0.3081]
     elif args.dataset.lower() == "cifar10":
         m, s = [0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]
     elif args.dataset.lower() == "cifar100":
         m, s = [0.5071, 0.4865, 0.4409], [0.2673, 0.2564, 0.2762]
     elif args.dataset.lower() == "fmnist":
-        m, s = [0.5], [0.5]
+        m, s = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
 
     return m, s
 
@@ -96,7 +96,7 @@ def get_optim(model, lr, criterion=None, proposed_lr=None):
     )
     if criterion != None:
         optimizer_proposed = optim.SGD(
-            criterion.parameters(), lr=proposed_lr, momentum=0.9, weight_decay=1e-3
+            criterion.parameters(), lr=proposed_lr #, momentum=0.9, weight_decay=1e-3
         )
         scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer_proposed, mode='min', factor=0.1, patience=20
@@ -139,13 +139,11 @@ def __get_dataset_name(args):
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, feature_dim, device, intra_p, inter_p, adv_train):
+    def __init__(self, num_class, dataset ,device):
         super(Loss, self).__init__()
         self.num_class = num_class
+        feature_dim = 256 if 'cifar' in dataset else 128
         self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
-        self.intra_p = intra_p if intra_p != 0 else float("Inf")
-        self.inter_p = inter_p if inter_p != 0 else float("Inf")
-        self.adv_train = adv_train
 
     def forward(self, features, labels):
         intra_loss = self.intra_loss(features, labels)
@@ -154,7 +152,7 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels):
         batch_size = features.size(0)
-        dist_mat = torch.cdist(features, self.center, p=self.intra_p)
+        dist_mat = torch.cdist(features, self.center, p=2)
         classes = torch.arange(self.num_class, dtype=torch.long, device=features.device)
 
         mask = labels.unsqueeze(1).eq(classes).squeeze()
@@ -162,7 +160,7 @@ class Loss(nn.Module):
         dist = []
         for i in range(batch_size):
             value = dist_mat[i][mask[i]]
-            value = value.clamp(min=1e-12, max=1e12)
+            value = value.clamp(min=1e-16, max=1e16)
             dist.append(value)
         dist = torch.cat(dist)
         loss = dist.mean()
@@ -177,20 +175,17 @@ class Loss(nn.Module):
         )
         center /= counts.clamp(min=1)
 
-        dist_mat = torch.cdist(center, center, p=self.intra_p) #float("Inf")
+        dist_mat = torch.cdist(center, center, p=2)
         combi = torch.combinations(torch.tensor(range(self.num_class)))
 
         total_dist = []
         for class_idx in combi:
             i, j = class_idx
             dist = dist_mat[i][j] * 2
-            dist = dist.clamp(min=1e-12, max=1e12)
+            dist = dist.clamp(min=1e-16, max=1e16)
             dist = torch.reciprocal(dist)
             total_dist.append(dist)
-        # dist = torch.cat(total_dist)
         loss = dist.mean()
 
-        # uniform loss
-        # uniform_loss = loss * (1 / (self.num_class * (self.num_class - 1)))
         return loss
 

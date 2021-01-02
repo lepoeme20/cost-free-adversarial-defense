@@ -10,16 +10,6 @@ from torch.autograd import Variable
 from torch.nn import Parameter
 import torchvision.models as models
 
-def conv3x3(in_planes, out_planes, stride=1):
-    """3x3 convolution with padding"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
-
-
-def conv1x1(in_planes, out_planes, stride=1):
-    """1x1 convolution"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
-
 
 class BasicBlock(nn.Module):
     expansion = 1
@@ -95,14 +85,14 @@ class Bottleneck(nn.Module):
         if self.downsample is not None:
             identity = self.downsample(x)
 
-        out += identity   # in our case is none
+        out += identity
         out = self.relu(out)
 
         return out
 
 
 class ResNet(nn.Module):
-    def __init__(self, depth=110, block_name='BasicBlock', num_classes=100):
+    def __init__(self, depth=110, block_name='Bottleneck', num_classes=100):
         super(ResNet, self).__init__()
         if block_name.lower() == 'basicblock':
             self.inplanes = 64
@@ -172,9 +162,9 @@ class ResNet(nn.Module):
 
         return out, feature
 
-def resnet(num_classes, block='BasicBlock'):
+def resnet(num_classes):
     """
     Constructs a ResNet model.
     """
-    return ResNet(num_classes=num_classes, block_name=block)
+    return ResNet(num_classes=num_classes)
 

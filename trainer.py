@@ -53,12 +53,13 @@ class Trainer():
             for step, (inputs, labels) in enumerate(self.train_loader, 0):
                 model.train()
                 current_step += 1
-
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
+                if inputs.size(1) == 1:
+                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
                 inputs = norm(inputs, self.m, self.s)
 
                 # Cross entropy loss
-                logit, _, features, _ = model(inputs)
+                logit, features = model(inputs)
                 loss = self.criterion_CE(logit, labels)
 
                 optimizer.zero_grad()
@@ -86,10 +87,12 @@ class Trainer():
                 model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
+                if inputs.size(1) == 1:
+                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
-                    logit, _, features, _ = model(inputs)
+                    logit, features = model(inputs)
 
                     # Cross entropy loss
                     loss = self.criterion_CE(logit, labels)

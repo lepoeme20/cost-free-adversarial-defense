@@ -5,6 +5,7 @@ import torch.optim as optim
 import torchvision
 from torchvision import transforms
 from resnet110 import resnet
+from resnet import resnet34
 from smallnet import small_resnet
 import torch.nn.functional as F
 
@@ -13,7 +14,8 @@ def network_initialization(args):
     if args.rgb == 1:
         net = small_resnet()
     else:
-        net = resnet(args.num_class)
+        # net = resnet(args.num_class)
+        net = resnet34(args.num_class)
 
     # Using multi GPUs if you have
     if torch.cuda.device_count() > 0:
@@ -95,7 +97,7 @@ def get_optim(model, lr, criterion=None, proposed_lr=None):
     )
     if criterion != None:
         optimizer_proposed = optim.SGD(
-            criterion.parameters(), lr=proposed_lr #, momentum=0.9, weight_decay=1e-3
+            criterion.parameters(), lr=proposed_lr, momentum=0.9, weight_decay=1e-3
         )
         scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer_proposed, mode='min', factor=0.1, patience=20
@@ -142,6 +144,7 @@ class Loss(nn.Module):
         super(Loss, self).__init__()
         self.num_class = num_class
         feature_dim = 256 if 'cifar' in dataset else 128
+        feature_dim = 512
         self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
 
     def forward(self, features, labels):
@@ -151,18 +154,18 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels):
         batch_size = features.size(0)
-        dist_mat = torch.cdist(features, self.center, p=2)
+        dist_mat = torch.cdist(features, self.center, p=2, compute_mode='donot_use_mm_for_euclid_dist')
         classes = torch.arange(self.num_class, dtype=torch.long, device=features.device)
 
         mask = labels.unsqueeze(1).eq(classes).squeeze()
 
-        dist = []
-        for i in range(batch_size):
-            value = dist_mat[i][mask[i]]
-            value = value.clamp(min=1e-16, max=1e16)
-            dist.append(value)
-        dist = torch.cat(dist)
-        loss = dist.mean()
+        loss = (dist_mat * mask).sum() / batch_size
+        # dist = []
+        # for i in range(batch_size):
+        #     value = dist_mat[i][mask[i]]
+        #     dist.append(value)
+        # dist = torch.cat(dist)
+        # loss = dist.mean()
 
         return loss
 
@@ -174,17 +177,19 @@ class Loss(nn.Module):
         )
         center /= counts.clamp(min=1)
 
-        dist_mat = torch.cdist(center, center, p=2)
-        combi = torch.combinations(torch.tensor(range(self.num_class)))
+        dist_mat = torch.cdist(center, center, p=2, compute_mode='donot_use_mm_for_euclid_dist')
 
-        total_dist = []
-        for class_idx in combi:
-            i, j = class_idx
-            dist = dist_mat[i][j] * 2
-            dist = dist.clamp(min=1e-16, max=1e16)
-            dist = torch.reciprocal(dist)
-            total_dist.append(dist)
-        loss = dist.mean()
+        _loss = dist_mat.sum() / (dist_mat.size(0) * dist_mat.size(1))
+        loss = torch.reciprocal(_loss)
+        # combi = torch.combinations(torch.tensor(range(self.num_class)))
+
+        # total_dist = []
+        # for class_idx in combi:
+        #     i, j = class_idx
+        #     dist = dist_mat[i][j] * 2
+        #     dist = torch.reciprocal(dist)
+        #     total_dist.append(dist)
+        # loss = dist.mean()
 
         return loss
 

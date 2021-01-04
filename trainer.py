@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from utils import network_initialization, get_dataloader
 from torch.utils.tensorboard import SummaryWriter
-from utils import get_m_s, norm, get_optim
+from utils import get_m_s, norm, get_optim, Loss
 from tqdm import tqdm
 
 class Trainer():
@@ -20,12 +20,13 @@ class Trainer():
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
+        self.criterion = Loss(args.num_class, args.dataset, args.device, pre=True)
 
         # set logger path
         log_num = 0
         while os.path.exists(f"logger/ce_loss/{args.dataset}/v{str(log_num)}"):
             log_num += 1
-        self.writer = SummaryWriter(f'logger/ce_loss/{args.dataset}/v{str(log_num)}')
+        self.writer = SummaryWriter(f"logger/ce_loss/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
         model = self.model
@@ -33,7 +34,7 @@ class Trainer():
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(model, args.lr)
 
-        model_path = os.path.join(self.save_path, "pretrained_model.pt")
+        model_path = os.path.join(self.save_path, "pretrained_model_inter.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
         self.writer.close()
         best_loss = 1000
@@ -60,28 +61,36 @@ class Trainer():
 
                 # Cross entropy loss
                 logit, features = model(inputs)
-                loss = self.criterion_CE(logit, labels)
+                ce_loss = self.criterion_CE(logit, labels)
+                _, inter_loss, center = self.criterion(features, labels)
+                loss = ce_loss + inter_loss
 
                 optimizer.zero_grad()
+                nn.utils.clip_grad_norm_(model.parameters(), 5.)
                 loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), 1.)
                 optimizer.step()
 
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
-                    f"[TRN] Total Loss: {loss.item():.4f}"
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
                 )
                 train.update(1)
 
-            if epoch % 10 == 0:
-                self.writer.add_embedding(
-                    features,
-                    metadata=labels.data.cpu().numpy(),
-                    label_img=inputs,
-                    global_step=current_step,
-                    tag="[TRN]Features",
-                )
-                self.writer.close()
+                # tensorboard logging
+                if step % len(self.train_loader) == 0:
+                    self.writer.add_scalar(
+                        "train/loss", loss.item(), global_step=current_step
+                    )
+
+                if current_step % (len(self.train_loader)*10) == 0:
+                    self.writer.add_embedding(
+                        features,
+                        metadata=labels.data.cpu().numpy(),
+                        label_img=inputs,
+                        global_step=current_step,
+                        tag="[TRN]Features",
+                    )
+                    self.writer.close()
 
             for idx, (inputs, labels) in enumerate(self.dev_loader, 0):
                 model.eval()
@@ -95,7 +104,9 @@ class Trainer():
                     logit, features = model(inputs)
 
                     # Cross entropy loss
-                    loss = self.criterion_CE(logit, labels)
+                    ce_loss = self.criterion_CE(logit, labels)
+                    inter_loss, center = self.criterion(features, labels)
+                    loss = ce_loss + inter_loss
 
                     # Loss
                     _dev_loss += loss
@@ -111,6 +122,16 @@ class Trainer():
                         self.writer.add_scalar("dev/loss", loss.item(), dev_step)
                         self.writer.close()
 
+                    if current_step % (len(self.train_loader)*10):
+                        self.writer.add_embedding(
+                            features,
+                            metadata=labels.data.cpu().numpy(),
+                            label_img=inputs,
+                            global_step=current_step,
+                            tag="[DEV]Features",
+                        )
+                        self.writer.close()
+
             if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
@@ -119,27 +140,13 @@ class Trainer():
                 torch.save(
                     {
                         "model_state_dict": model.module.state_dict(),
+                        "center_state_dict": center.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
                         "trained_epoch": epoch
                     },
                     model_path
                 )
-
-            # tensorboard logging
-            self.writer.add_scalar(
-                "train/loss", loss.item(), global_step=current_step
-            )
-            self.writer.close()
-            if epoch % 10 == 0:
-                self.writer.add_embedding(
-                    features,
-                    metadata=labels.data.cpu().numpy(),
-                    label_img=inputs,
-                    global_step=current_step,
-                    tag="[DEV]Features",
-                )
-                self.writer.close()
 
             scheduler.step(dev_loss)
             outer.update(1)

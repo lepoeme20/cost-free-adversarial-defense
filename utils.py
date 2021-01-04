@@ -140,32 +140,31 @@ def __get_dataset_name(args):
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, dataset ,device):
+    def __init__(self, num_class,device, center=None, pre=False):
         super(Loss, self).__init__()
         self.num_class = num_class
-        feature_dim = 256 if 'cifar' in dataset else 128
-        feature_dim = 512
-        self.center = nn.Parameter(torch.randn((num_class, feature_dim), device=device))
+        self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
+        self.classes = torch.arange(num_class, dtype=torch.long, device=device)
+        if center != None:
+            self.center.load_state_dict(checkpoint["center_state_dict"])
+        self.pre = pre
 
     def forward(self, features, labels):
-        intra_loss = self.intra_loss(features, labels)
-        inter_loss = self.inter_loss(features, labels)
-        return intra_loss, inter_loss, self.center
+        if self.pre:
+            inter_loss = self.inter_loss(features, labels)
+            return inter_loss, self.center
+        else:
+            intra_loss = self.intra_loss(features, labels)
+            inter_loss = self.inter_loss(features, labels)
+            return intra_loss, inter_loss, self.center
 
     def intra_loss(self, features, labels):
         batch_size = features.size(0)
         dist_mat = torch.cdist(features, self.center, p=2, compute_mode='donot_use_mm_for_euclid_dist')
-        classes = torch.arange(self.num_class, dtype=torch.long, device=features.device)
 
-        mask = labels.unsqueeze(1).eq(classes).squeeze()
+        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
 
         loss = (dist_mat * mask).sum() / batch_size
-        # dist = []
-        # for i in range(batch_size):
-        #     value = dist_mat[i][mask[i]]
-        #     dist.append(value)
-        # dist = torch.cat(dist)
-        # loss = dist.mean()
 
         return loss
 
@@ -181,15 +180,6 @@ class Loss(nn.Module):
 
         _loss = dist_mat.sum() / (dist_mat.size(0) * dist_mat.size(1))
         loss = torch.reciprocal(_loss)
-        # combi = torch.combinations(torch.tensor(range(self.num_class)))
-
-        # total_dist = []
-        # for class_idx in combi:
-        #     i, j = class_idx
-        #     dist = dist_mat[i][j] * 2
-        #     dist = torch.reciprocal(dist)
-        #     total_dist.append(dist)
-        # loss = dist.mean()
 
         return loss
 

@@ -20,7 +20,7 @@ class Trainer():
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, args.dataset, args.device, pre=True)
+        self.criterion = Loss(args.num_class, args.device, pre=True)
 
         # set logger path
         log_num = 0
@@ -32,11 +32,13 @@ class Trainer():
         model = self.model
 
         # set optimizer & scheduler
-        optimizer, scheduler = get_optim(model, args.lr)
+        # optimizer, scheduler = get_optim(model, args.lr)
+        optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
+            model, args.lr, self.criterion, args.lr_proposed
+        )
 
-        model_path = os.path.join(self.save_path, "pretrained_model_inter.pt")
+        model_path = os.path.join(self.save_path, "pretrained_model_2.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
-        self.writer.close()
         best_loss = 1000
         current_step = 0
         dev_step = 0
@@ -56,19 +58,21 @@ class Trainer():
                 current_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if inputs.size(1) == 1:
-                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs = norm(inputs, self.m, self.s)
 
                 # Cross entropy loss
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                _, inter_loss, center = self.criterion(features, labels)
+                inter_loss = self.criterion(features, labels)
                 loss = ce_loss + inter_loss
 
                 optimizer.zero_grad()
-                nn.utils.clip_grad_norm_(model.parameters(), 5.)
+                optimizer_proposed.zero_grad()
+                nn.utils.clip_grad_norm_(model.parameters(), 1.)
                 loss.backward()
                 optimizer.step()
+                optimizer_proposed.zero_grad()
 
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
@@ -77,12 +81,12 @@ class Trainer():
                 train.update(1)
 
                 # tensorboard logging
-                if step % len(self.train_loader) == 0:
+                if current_step == 1 or current_step % len(self.train_loader) == 0:
                     self.writer.add_scalar(
-                        "train/loss", loss.item(), global_step=current_step
+                        tag="[TRN] loss", scalar_value=loss.item(), global_step=current_step
                     )
 
-                if current_step % (len(self.train_loader)*10) == 0:
+                if current_step == 1 or current_step % (len(self.train_loader)*1) == 0:
                     self.writer.add_embedding(
                         features,
                         metadata=labels.data.cpu().numpy(),
@@ -90,14 +94,13 @@ class Trainer():
                         global_step=current_step,
                         tag="[TRN]Features",
                     )
-                    self.writer.close()
 
             for idx, (inputs, labels) in enumerate(self.dev_loader, 0):
                 model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if inputs.size(1) == 1:
-                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
@@ -105,7 +108,7 @@ class Trainer():
 
                     # Cross entropy loss
                     ce_loss = self.criterion_CE(logit, labels)
-                    inter_loss, center = self.criterion(features, labels)
+                    inter_loss = self.criterion(features, labels)
                     loss = ce_loss + inter_loss
 
                     # Loss
@@ -118,19 +121,19 @@ class Trainer():
 
                     #################### Logging ###################
                     dev.update(1)
-                    if idx % args.dev_interval == 0:
-                        self.writer.add_scalar("dev/loss", loss.item(), dev_step)
-                        self.writer.close()
+                    if dev_step == 1 or dev_step % len(self.dev_loader) == 0:
+                        self.writer.add_scalar(
+                            tag="[DEV] loss", scalar_value=loss.item(), global_step=dev_step
+                        )
 
-                    if current_step % (len(self.train_loader)*10):
+                    if dev_step == 1 or dev_step % (len(self.dev_loader)*10) == 0:
                         self.writer.add_embedding(
                             features,
                             metadata=labels.data.cpu().numpy(),
                             label_img=inputs,
-                            global_step=current_step,
+                            global_step=dev_step,
                             tag="[DEV]Features",
                         )
-                        self.writer.close()
 
             if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
@@ -140,13 +143,15 @@ class Trainer():
                 torch.save(
                     {
                         "model_state_dict": model.module.state_dict(),
-                        "center_state_dict": center.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
+                        "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
-                        "trained_epoch": epoch
+                        "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
+                        "trained_epoch": epoch,
                     },
                     model_path
                 )
 
             scheduler.step(dev_loss)
+            scheduler_proposed.step(dev_loss)
             outer.update(1)

@@ -8,7 +8,7 @@ from utils import (
     get_m_s,
     norm,
     get_optim,
-    Loss
+    Loss,
 )
 from attack_methods import pgd, fgsm
 from tqdm import tqdm
@@ -26,9 +26,12 @@ class ProposedTrainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
+        pretrained_path = os.path.join(self.save_path, 'pretrained_model_2.pt')
+        self.checkpoint = torch.load(pretrained_path)
+
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, args.dataset, args.device)
+        self.criterion = Loss(args.num_class, args.device)
 
         # set logger path
         log_num = 0
@@ -47,19 +50,18 @@ class ProposedTrainer:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
 
-        # pretrained_path = os.path.join(self.save_path, 'pretrained_model.pt')
         # load the model weights
-        # checkpoint = torch.load(pretrained_path)#, map_location=f"cuda:{args.device_ids[0]}")
-        # model.module.load_state_dict(checkpoint["model_state_dict"])
+        model.module.load_state_dict(self.checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
         optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
             model, args.lr, self.criterion, args.lr_proposed
         )
-        # optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
+        # optimizer_proposed.load_state_dict(self.checkpoint["optimizer_proposed_state_dict"])
 
         # base model
-        model_name = f"proposed_model.pt"
+        model_name = f"proposed_model_2.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
@@ -95,8 +97,11 @@ class ProposedTrainer:
 
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                intra_loss, inter_loss, center = self.criterion(features, labels)
-                loss = ce_loss + args.lambda_intra*intra_loss + args.lambda_inter*inter_loss
+                # intra_loss, inter_loss, center = self.criterion(features, labels)
+                # loss = ce_loss + args.lambda_intra*intra_loss + args.lambda_inter*inter_loss
+                intra_loss = self.criterion(features, labels)
+                loss = ce_loss + args.lambda_intra*intra_loss
+                inter_loss = torch.tensor([0])
 
                 optimizer.zero_grad()
                 optimizer_proposed.zero_grad()
@@ -110,12 +115,6 @@ class ProposedTrainer:
                 train.update(1)
 
             if epoch % 10 == 0:
-                self.writer.add_embedding(
-                    center,
-                    metadata=list(range(0, args.num_class)),
-                    global_step=current_step,
-                    tag="[TRN]Centers",
-                )
                 self.writer.add_embedding(
                     features,
                     metadata=labels.data.cpu().numpy(),
@@ -140,8 +139,11 @@ class ProposedTrainer:
                 with torch.no_grad():
                     logit, features = model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    intra_loss, inter_loss, center = self.criterion(features, labels)
-                    loss = ce_loss + intra_loss + inter_loss
+                    # intra_loss, inter_loss, center = self.criterion(features, labels)
+                    # loss = ce_loss + intra_loss + inter_loss
+                    intra_loss = self.criterion(features, labels)
+                    loss = ce_loss + args.lambda_intra*intra_loss
+                    inter_loss = torch.tensor([0])
 
                     # Loss
                     _dev_loss += loss
@@ -165,7 +167,6 @@ class ProposedTrainer:
                 torch.save(
                     {
                         "model_state_dict": model.module.state_dict(),
-                        "center_state_dict": self.criterion.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
                         "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
@@ -191,13 +192,6 @@ class ProposedTrainer:
             self.writer.close()
             if epoch % 10 == 0:
                 self.writer.add_embedding(
-                    center,
-                    metadata=list(range(0, args.num_class)),
-                    global_step=current_step,
-                    tag="[DEV]Centers",
-                )
-                self.writer.close()
-                self.writer.add_embedding(
                     features,
                     metadata=labels.data.cpu().numpy(),
                     label_img=inputs,
@@ -215,7 +209,6 @@ class ProposedTrainer:
         torch.save(
             {
                 "model_state_dict": model.module.state_dict(),
-                "center_state_dict": self.criterion.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),

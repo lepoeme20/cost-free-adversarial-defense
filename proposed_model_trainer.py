@@ -26,7 +26,7 @@ class ProposedTrainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, 'pretrained_model_2.pt')
+        pretrained_path = os.path.join(self.save_path, 'pretrained_model_34.pt')
         self.checkpoint = torch.load(pretrained_path)
 
         # set criterion
@@ -61,7 +61,7 @@ class ProposedTrainer:
         # optimizer_proposed.load_state_dict(self.checkpoint["optimizer_proposed_state_dict"])
 
         # base model
-        model_name = f"proposed_model_2.pt"
+        model_name = f"proposed_model_34_re_2.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
@@ -97,11 +97,11 @@ class ProposedTrainer:
 
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                # intra_loss, inter_loss, center = self.criterion(features, labels)
-                # loss = ce_loss + args.lambda_intra*intra_loss + args.lambda_inter*inter_loss
-                intra_loss = self.criterion(features, labels)
+                intra_loss, inter_loss = self.criterion(features, labels)
                 loss = ce_loss + args.lambda_intra*intra_loss
-                inter_loss = torch.tensor([0])
+                # intra_loss = self.criterion(features, labels)
+                # loss = ce_loss + args.lambda_intra*intra_loss
+                # inter_loss = torch.tensor([0])
 
                 optimizer.zero_grad()
                 optimizer_proposed.zero_grad()
@@ -139,11 +139,11 @@ class ProposedTrainer:
                 with torch.no_grad():
                     logit, features = model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    # intra_loss, inter_loss, center = self.criterion(features, labels)
-                    # loss = ce_loss + intra_loss + inter_loss
-                    intra_loss = self.criterion(features, labels)
-                    loss = ce_loss + args.lambda_intra*intra_loss
-                    inter_loss = torch.tensor([0])
+                    intra_loss, inter_loss = self.criterion(features, labels)
+                    loss = ce_loss + intra_loss # + inter_loss
+                    # intra_loss = self.criterion(features, labels)
+                    # loss = ce_loss + args.lambda_intra*intra_loss
+                    # inter_loss = torch.tensor([0])
 
                     # Loss
                     _dev_loss += loss

@@ -22,11 +22,7 @@ class Test:
             args.save_path,
             args.dataset,
         )
-        self.model_path = {
-            "pretrained_model": os.path.join(model_path, "pretrained_model.pt"),
-            "proposed_model": os.path.join(model_path, "proposed_model.pt"),
-            "proposed_adv_model": os.path.join(model_path, "proposed_model_adv_train.pt"),
-        }
+        self.model_path = os.path.join(model_path, f"{args.test_model}.pt")
 
     def load_model(self, model, load_path):
         checkpoint = torch.load(load_path)
@@ -47,7 +43,7 @@ class Test:
 
     def testing(self):
         # inter_model을 사용하고 싶은 경우 self.total_path > self.pre_path 변경
-        model = self.load_model(self.model, self.model_path[self.args.test_model])
+        model = self.load_model(self.model, self.model_path)
 
         args.batch_size = args.test_batch_size
         _, _, tst_loader = get_dataloader(self.args)

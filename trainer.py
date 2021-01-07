@@ -32,12 +32,11 @@ class Trainer():
         model = self.model
 
         # set optimizer & scheduler
-        # optimizer, scheduler = get_optim(model, args.lr)
         optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
             model, args.lr, self.criterion, args.lr_proposed
         )
 
-        model_path = os.path.join(self.save_path, "pretrained_model_2.pt")
+        model_path = os.path.join(self.save_path, "pretrained_model_inter.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
         best_loss = 1000
         current_step = 0
@@ -72,7 +71,7 @@ class Trainer():
                 nn.utils.clip_grad_norm_(model.parameters(), 1.)
                 loss.backward()
                 optimizer.step()
-                optimizer_proposed.zero_grad()
+                optimizer_proposed.step()
 
                 #################### Logging ###################
                 trn_loss_log.set_description_str(

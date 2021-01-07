@@ -144,12 +144,15 @@ class Loss(nn.Module):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
+        # sampler = torch.distributions.Uniform(low=-2, high=2)
+        # center = sampler.sample((num_class, 512))
+        # self.center = nn.Parameter(center.to(device))
         self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
         if pre_center != None:
-            self.center = nn.Parameter(pre_center).to(device)
+            self.center = nn.Parameter(pre_center.to(device))
         self.pre = pre
         center_dist_mat = torch.cdist(
-            self.center, self.center, p=2, compute_mode='donot_use_mm_for_euclid_dist'
+            self.center, self.center, p=2, # compute_mode='donot_use_mm_for_euclid_dist'
         )
         self.center_dist = torch.mean(center_dist_mat)
 
@@ -158,18 +161,19 @@ class Loss(nn.Module):
             expansion_loss = self.expansion_loss(features, labels)
             return expansion_loss
         else:
-            # inter_loss, center = self.inter_loss(features, labels)
             intra_loss = self.intra_loss(features, labels)
-            # return intra_loss, inter_loss, center
-            return intra_loss
+            inter_loss = self.inter_loss(features, labels)
+            return intra_loss, inter_loss
 
     def intra_loss(self, features, labels):
         batch_size = features.size(0)
-        dist_mat = torch.cdist(features, self.center, p=2, compute_mode='donot_use_mm_for_euclid_dist')
+        dist_mat = torch.cdist(
+            features, self.center, p=2, # compute_mode='donot_use_mm_for_euclid_dist'
+        )
 
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
 
-        loss = (dist_mat[:batch_size] * mask).sum() / batch_size
+        loss = (dist_mat*mask).sum() / batch_size
 
         return loss
 
@@ -183,25 +187,28 @@ class Loss(nn.Module):
         )
         center /= counts.clamp(min=1)
 
-        dist_mat = torch.cdist(center, center, p=2, compute_mode='donot_use_mm_for_euclid_dist')
+        dist_mat = torch.cdist(
+            center, center, p=2, # compute_mode='donot_use_mm_for_euclid_dist'
+        )
 
-        # _loss = dist_mat.sum() / (dist_mat.size(0) * dist_mat.size(1))
-        _loss = torch.mean(dist_mat)
+        _loss = dist_mat.sum() / (dist_mat.size(0) * dist_mat.size(1))
         loss = torch.reciprocal(_loss)
 
-        # self.center = nn.Parameter(center).to(labels.device)
-        return loss, center
+        return loss
 
     def expansion_loss(self, features, labels):
-        dist_mat = torch.cdist(features, self.center, p=2, compute_mode='donot_use_mm_for_euclid_dist')
+        dist_mat = torch.cdist(
+            features, self.center, p=2, # compute_mode='donot_use_mm_for_euclid_dist'
+        )
 
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
-        masked_dist_mat = dist_mat[:features.size(0)] * mask
+        masked_dist_mat = dist_mat * mask
 
         zero = torch.zeros(1, dtype=torch.float, device=features.device)
-        dist_mat = torch.where(masked_dist_mat < self.center_dist/2, zero, masked_dist_mat)
+        dist = torch.sum(masked_dist_mat, 1) # row sum
+        dist = torch.where(dist < 6, 1/dist, dist)
 
-        loss = dist_mat.sum()/features.size(0)
+        loss = torch.mean(dist)
 
         return loss
 

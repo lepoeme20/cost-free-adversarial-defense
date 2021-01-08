@@ -67,7 +67,7 @@ def parser_setting(parser):
         help='input batch size for testing (default: auto)'
         )
     trn_args.add_argument(
-        '--seed', type=int, default=200, help='Seed for reproductibility'
+        '--seed', type=int, default=22, help='Seed for reproductibility'
     )
 
     opt_args = parser.add_argument_group('optimizer params')
@@ -140,10 +140,10 @@ def parser_setting(parser):
 
     ablation_args = parser.add_argument_group('Ablation')
     ablation_args.add_argument(
-        '--lambda-intra', type=float, default=2., help="Intra loss weight"
+        '--lambda-intra', type=float, default=1., help="Intra loss weight"
     )
     ablation_args.add_argument(
-        '--lambda-inter', type=float, default=0.02, help="Inter loss weight"
+        '--lambda-inter', type=float, default=1., help="Inter loss weight"
     )
 
     return parser
@@ -165,7 +165,4 @@ def get_config():
     args.num_class = 100 if args.dataset == 'cifar100' else 10
 
     return args
-
-
-
 

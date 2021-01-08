@@ -6,6 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 from utils import get_m_s, norm, get_optim, Loss
 from tqdm import tqdm
 
+
 class Trainer():
     def __init__(self,args):
         # dataloader
@@ -14,19 +15,16 @@ class Trainer():
         self.model = network_initialization(args)
         # get mean and std for normalization
         self.m, self.s = get_m_s(args)
-
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
-
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
         self.criterion = Loss(args.num_class, args.device, pre=True)
-
         # set logger path
         log_num = 0
         while os.path.exists(f"logger/ce_loss/{args.dataset}/v{str(log_num)}"):
             log_num += 1
-        self.writer = SummaryWriter(f"logger/ce_loss/{args.dataset}/v{str(log_num)}")
+        self.writer = SummaryWriter(f'logger/ce_loss/{args.dataset}/v{str(log_num)}')
 
     def training(self, args):
         model = self.model
@@ -38,6 +36,8 @@ class Trainer():
 
         model_path = os.path.join(self.save_path, "pretrained_model_inter.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
+        self.writer.close()
+
         best_loss = 1000
         current_step = 0
         dev_step = 0
@@ -63,19 +63,19 @@ class Trainer():
                 # Cross entropy loss
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                inter_loss = self.criterion(features, labels)
-                loss = ce_loss + inter_loss
+                restricted_loss, inter_loss, center = self.criterion(features, labels)
+                loss = ce_loss + restricted_loss - inter_loss
 
                 optimizer.zero_grad()
                 optimizer_proposed.zero_grad()
-                nn.utils.clip_grad_norm_(model.parameters(), 1.)
                 loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), 1.)
                 optimizer.step()
                 optimizer_proposed.step()
 
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
-                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Res: {restricted_loss.item():4f}, Inter: {inter_loss.item():.4f}"
                 )
                 train.update(1)
 
@@ -107,17 +107,14 @@ class Trainer():
 
                     # Cross entropy loss
                     ce_loss = self.criterion_CE(logit, labels)
-                    inter_loss = self.criterion(features, labels)
-                    loss = ce_loss + inter_loss
-
+                    restricted_loss, inter_loss, _ = self.criterion(features, labels)
+                    loss = ce_loss + restricted_loss - inter_loss
                     # Loss
                     _dev_loss += loss
                     dev_loss = _dev_loss/(idx+1)
-
                     dev_loss_log.set_description_str(
                         f"[DEV] Loss: {dev_loss:.4f}"
                     )
-
                     #################### Logging ###################
                     dev.update(1)
                     if dev_step == 1 or dev_step % len(self.dev_loader) == 0:
@@ -143,10 +140,11 @@ class Trainer():
                     {
                         "model_state_dict": model.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
-                        "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
+                        "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                         "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
                         "trained_epoch": epoch,
+                        "center": center
                     },
                     model_path
                 )
@@ -154,3 +152,15 @@ class Trainer():
             scheduler.step(dev_loss)
             scheduler_proposed.step(dev_loss)
             outer.update(1)
+            torch.save(
+                {
+                    "model_state_dict": model.module.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "scheduler_state_dict": scheduler.state_dict(),
+                    "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
+                    "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
+                    "trained_epoch": epoch,
+                    "center": center
+                },
+                os.path.join(self.save_path, "pretrained_model_last.pt")
+            )

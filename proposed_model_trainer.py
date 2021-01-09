@@ -28,14 +28,14 @@ class ProposedTrainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        # pretrained_path = os.path.join(self.save_path, 'pretrained_model_last.pt')
-        # self.checkpoint = torch.load(pretrained_path)
-        # center = self.checkpoint["center"]
+        pretrained_path = os.path.join(self.save_path, 'pretrained_model_negative_last.pt')
+        self.checkpoint = torch.load(pretrained_path)
+        center = self.checkpoint["center"]
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        # self.criterion = Loss(args.num_class, args.device, pre_center=center)
-        self.criterion = Loss(args.num_class, args.device)
+        self.criterion = Loss(args.num_class, args.device, pre_center=center)
+        # self.criterion = Loss(args.num_class, args.device)
 
         # set logger path
         log_num = 0
@@ -55,7 +55,7 @@ class ProposedTrainer:
             attack_func = getattr(pgd, "PGD")
 
         # load the model weights
-        # model.module.load_state_dict(self.checkpoint["model_state_dict"])
+        model.module.load_state_dict(self.checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
         optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
@@ -64,11 +64,11 @@ class ProposedTrainer:
         # optimizer, scheduler = get_optim(
         #     model, args.lr
         # )
-        # optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
+        optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
         # optimizer_proposed.load_state_dict(self.checkpoint["optimizer_proposed_state_dict"])
 
         # base model
-        model_name = f"proposed_model_total.pt"
+        model_name = f"proposed_model_inter.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
@@ -105,7 +105,7 @@ class ProposedTrainer:
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss, inter_loss = self.criterion(features, labels)
-                loss = ce_loss + args.lambda_intra*intra_loss - args.lambda_inter*inter_loss
+                loss = ce_loss + 2*intra_loss - intra_loss
                 # intra_loss = self.criterion(features, labels)
                 # loss = ce_loss + args.lambda_intra*intra_loss
                 # inter_loss = torch.tensor([0])
@@ -163,7 +163,7 @@ class ProposedTrainer:
                     #################### Logging ###################
                     dev.update(1)
                     if idx % args.dev_interval == 0:
-                        self.writer.add_scalar("dev/loss", loss.item(), dev_step)
+                        self.writer.add_scalar("dev/loss", dev_loss.item(), dev_step)
                         self.writer.close()
 
             if dev_loss < best_loss:
@@ -175,9 +175,9 @@ class ProposedTrainer:
                     {
                         "model_state_dict": model.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
-                        "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
+                        # "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
-                        "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
+                        # "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
                         "trained_epoch": epoch
                     },
                     model_path
@@ -212,14 +212,14 @@ class ProposedTrainer:
             outer.update(1)
 
             # save the last epoch model
-            save_last_path = f"{model_path.split('.')[0]}_last.pt"
+            save_last_path = f"{model_path[:-3]}_last.pt"
             torch.save(
                 {
                     "model_state_dict": model.module.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
+                    # "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                     "scheduler_state_dict": scheduler.state_dict(),
-                    "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
+                    # "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
                     "trained_epoch": epoch
                 },
                 save_last_path

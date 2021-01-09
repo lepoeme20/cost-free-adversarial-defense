@@ -52,7 +52,7 @@ def __get_loader(args, data_name, transformer):
     )
 
     trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_cpu, drop_loas=True
+        trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_cpu, drop_last=True
     )
     devloader = torch.utils.data.DataLoader(
         devset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_cpu
@@ -143,7 +143,7 @@ class Loss(nn.Module):
         if pre_center == None:
             self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
         else:
-            self.center = pre_center.data.detach().to(device)
+            self.center = nn.Parameter(pre_center.data.detach().to(device))
         self.pre = pre
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
@@ -158,7 +158,7 @@ class Loss(nn.Module):
         if self.pre:
             expansion_loss = self.expansion_loss(features, labels)
             inter_loss = self.inter_loss(features, labels)
-            return expansion_loss, inter_loss, self.center
+            return expansion_loss, inter_loss, self.center.data
         else:
             intra_loss = self.intra_loss(features, labels)
             inter_loss = self.inter_loss(features, labels)
@@ -166,7 +166,7 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
-        loss = (masked_dist_mat).sum() / batch_size
+        loss = (masked_dist_mat).sum() / labels.size(0)
 
         return loss
 
@@ -187,7 +187,7 @@ class Loss(nn.Module):
         dist = torch.where(dist_mat < self.thres_inter, dist_mat, zero)
         loss = torch.mean(dist)
         # loss = dist_mat.sum() / (dist_mat.size(0) * dist_mat.size(1))
-        # loss = torch.reciprocal(_loss)
+        # loss = torch.reciprocal(loss)
 
         return loss
 
@@ -195,7 +195,7 @@ class Loss(nn.Module):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
-        dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.threshold)
+        dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
 
         loss = (dist.sum()/labels.size(0))
 
@@ -204,5 +204,5 @@ class Loss(nn.Module):
     def _get_masked_dist_mat(self, features, labels):
         dist_mat = torch.cdist(features, self.center, p=2)
 
-        mask = lables.unsqueeze(1).eq(self.classes).squeeze()
+        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
         return (dist_mat*mask)

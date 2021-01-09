@@ -34,7 +34,7 @@ class Trainer():
             model, args.lr, self.criterion, args.lr_proposed
         )
 
-        model_path = os.path.join(self.save_path, "pretrained_model_inter.pt")
+        model_path = os.path.join(self.save_path, "pretrained_model_inter_re.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
         self.writer.close()
 
@@ -48,7 +48,10 @@ class Trainer():
         outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
 
         # Train target classifier
+        lambda_inter_list = torch.cos(torch.arange(0, 3.14/2, 1/(args.epochs*0.5)))
         for epoch in range(args.epochs):
+            if epoch < len(lambda_inter_list):
+                lambda_inter = lambda_inter_list[epoch]
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
@@ -113,7 +116,7 @@ class Trainer():
                     _dev_loss += loss
                     dev_loss = _dev_loss/(idx+1)
                     dev_loss_log.set_description_str(
-                        f"[DEV] Loss: {dev_loss:.4f}"
+                        f"[DEV] Total Loss: {dev_loss.item():.4f}, CE: {ce_loss.item():.4f}, Res: {restricted_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
                     )
                     #################### Logging ###################
                     dev.update(1)
@@ -162,5 +165,5 @@ class Trainer():
                     "trained_epoch": epoch,
                     "center": center
                 },
-                os.path.join(self.save_path, "pretrained_model_last.pt")
+                f"{model_path[:-3]}_last.pt"
             )

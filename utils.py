@@ -84,21 +84,31 @@ def norm(tensor, m, s):
     return output
 
 
-def get_optim(model, lr, criterion=None, proposed_lr=None):
+def get_optim(model, lr, inter=None, inter_lr=None, intra=None, intra_lr=None):
     optimizer = optim.SGD(
         model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-3
     )
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.1, patience=10
     )
-    if criterion != None:
-        optimizer_proposed = optim.SGD(
-            criterion.parameters(), lr=proposed_lr #, momentum=0.9, weight_decay=1e-3
+    if inter != None:
+        print("Create inter optimizer")
+        optimizer_inter = optim.SGD(
+            inter.parameters(), lr=inter_lr #, momentum=0.9, weight_decay=1e-3
         )
-        scheduler_proposed = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer_proposed, mode='min', factor=0.1, patience=10
+        scheduler_inter = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer_inter, mode='min', factor=0.1, patience=10
         )
-        return optimizer, scheduler, optimizer_proposed, scheduler_proposed
+        return optimizer, scheduler, optimizer_inter, scheduler_inter
+    elif intra != None:
+        print("Create intra optimizer")
+        optimizer_intra = optim.SGD(
+           intra.parameters(), lr=intra_lr, momentum=0.99, weight_decay=1e-3
+        )
+        scheduler_intra = optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer_intra, mode='min', factor=0.1, patience=10
+        )
+        return optimizer, scheduler, optimizer_intra, scheduler_intra
     else:
         return optimizer, scheduler
 
@@ -144,21 +154,24 @@ class Loss(nn.Module):
             self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
         else:
             self.center = nn.Parameter(pre_center.data.detach().to(device))
+            # self.center = pre_center.data.detach().to(device)
+            # self.center.requires_grad= False
         self.pre = pre
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
         threshold = (torch.mean(center_dist_mat)).detach()
-        self.thres_inter = threshold*3
-        self.thres_rest = threshold/3
+        self.thres_inter = threshold*5
+        self.thres_rest = threshold/2
 
-        self.empty_parameter = nn.Parameter(torch.tensor([1.]))
+        # self.empty_parameter = nn.Parameter(torch.tensor([1.]))
 
     def forward(self, features, labels):
         if self.pre:
-            expansion_loss = self.expansion_loss(features, labels)
+            # expansion_loss = self.expansion_loss(features, labels)
             inter_loss = self.inter_loss(features, labels)
-            return expansion_loss, inter_loss, self.center.data
+            intra_loss = self.intra_loss(features, labels)
+            return intra_loss, inter_loss, self.center.data
         else:
             intra_loss = self.intra_loss(features, labels)
             inter_loss = self.inter_loss(features, labels)
@@ -171,25 +184,30 @@ class Loss(nn.Module):
         return loss
 
     def inter_loss(self, features, labels):
-        count_input = torch.zeros((self.num_class, 1), device=labels.device)
-        counts = torch.scatter_add(
-            count_input, 0, labels.unsqueeze(1), torch.ones_like(features)
-        )
-        center = self.center.scatter_add(
-            0, labels.unsqueeze(1).repeat(1, features.size(-1)), features
-        )
-        center /= counts.clamp(min=1)
+        center = self.center.data
+        label_counts = torch.zeros((self.num_class, 1), device=labels.device)
+        for label_idx in labels:
+            label_counts[label_idx] += 1
+
+        # added
+        batch_center = torch.zeros_like(center, device=labels.device)
+        for feature, label_idx in zip(features, labels):
+            batch_center[label_idx] += feature
+        batch_center /= label_counts.clamp(min=1)
+
+        center += batch_center
+        center /= 2
 
         dist_mat = torch.cdist(
             center, center, p=2
         )
         zero = torch.zeros(1, dtype=torch.float, device=features.device)
         dist = torch.where(dist_mat < self.thres_inter, dist_mat, zero)
-        loss = torch.mean(dist)
+        inter_loss = torch.mean(dist)
         # loss = dist_mat.sum() / (dist_mat.size(0) * dist_mat.size(1))
         # loss = torch.reciprocal(loss)
 
-        return loss
+        return inter_loss
 
     def expansion_loss(self, features, labels):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
@@ -202,7 +220,104 @@ class Loss(nn.Module):
         return loss
 
     def _get_masked_dist_mat(self, features, labels):
-        dist_mat = torch.cdist(features, self.center, p=2)
+        center = self.center.detach()
+        dist_mat = torch.cdist(features, center, p=2)
+
+        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
+        return (dist_mat*mask)
+
+
+class InterLoss(nn.Module):
+    def __init__(self, num_class,device, pre_center=None):
+        super(InterLoss, self).__init__()
+        self.num_class = num_class
+        self.classes = torch.arange(num_class, dtype=torch.long, device=device)
+        if pre_center == None:
+            self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
+        else:
+            self.center = pre_center.clone().detach().to(device)
+        center_dist_mat = torch.cdist(
+            self.center, self.center, p=2
+        )
+        self.threshold = 7 # (torch.mean(center_dist_mat)).detach() * 3
+        print(self.threshold)
+
+    def forward(self, features, labels):
+        inter_loss = self.inter_loss(features, labels)
+        return inter_loss, self.center.data
+
+    def inter_loss(self, features, labels):
+        center = self.center.data
+        label_counts = torch.zeros((self.num_class, 1), device=labels.device)
+        for label_idx in labels:
+            label_counts[label_idx] += 1
+
+        # added
+        batch_center = torch.zeros_like(center, device=labels.device)
+        for feature, label_idx in zip(features, labels):
+            batch_center[label_idx] += feature
+        batch_center /= label_counts.clamp(min=1)
+
+        center += batch_center
+        center /= 2
+
+        dist_mat = torch.cdist(
+            center, center, p=2
+        )
+        zero = torch.zeros(1, dtype=torch.float, device=features.device)
+        dist = torch.where(dist_mat < self.threshold, dist_mat, zero)
+        loss = torch.mean(dist)
+
+        return loss
+
+
+class IntraLoss(nn.Module):
+    def __init__(self, num_class,device, pre=False, pre_center=None):
+        super(IntraLoss, self).__init__()
+        self.num_class = num_class
+        if pre_center != None:
+            self.center = nn.Parameter(pre_center.to(device))
+        else:
+            # weight = torch.normal(5, 3, (num_class, 1), device=device)
+            weight = torch.abs(torch.normal(1, 2, (num_class, 1), device=device))
+            center = torch.randn((num_class, 512), device=device) * weight
+            self.center = nn.Parameter(center)
+        self.classes = torch.arange(num_class, dtype=torch.long, device=device)
+        self.threshold = 5
+        self.pre = pre
+
+    def forward(self, features, labels, center=None):
+        if self.pre:
+            restricted_loss = self.restricted_loss(features, labels, center)
+            return restricted_loss
+        else:
+            intra_loss = self.intra_loss(features, labels)
+            return intra_loss
+
+    def intra_loss(self, features, labels, center):
+        # dist_mat = torch.cdist(features, self.center, p=2)
+        dist_mat = torch.cdist(features, center, p=2)
+        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
+        loss = (dist_mat*mask).sum() / labels.size(0)
+
+        return loss
+    # add
+    def restricted_loss(self, features, labels, center):
+        # center = center.clone().detach()
+        dist_mat = torch.cdist(features, center, p=2)
+        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
+
+        masked_dist_mat = (dist_mat*mask)
+        dist = torch.sum(masked_dist_mat, 1) # row sum
+        dist = torch.where(dist < self.threshold, self.threshold-dist, dist-self.threshold)
+
+        loss = (dist.sum()/labels.size(0))
+
+        return loss
+
+    def _get_masked_dist_mat(self, features, labels, center):
+        # center = center.clone().detach()
+        dist_mat = torch.cdist(features, center, p=2)
 
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
         return (dist_mat*mask)

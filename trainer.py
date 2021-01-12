@@ -1,9 +1,10 @@
 import os
+import numpy as np
 import torch
 import torch.nn as nn
 from utils import network_initialization, get_dataloader
 from torch.utils.tensorboard import SummaryWriter
-from utils import get_m_s, norm, get_optim, Loss
+from utils import get_m_s, norm, get_optim, Loss, InterLoss, IntraLoss
 from tqdm import tqdm
 
 
@@ -19,22 +20,28 @@ class Trainer():
         os.makedirs(self.save_path, exist_ok=True)
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, args.device, pre=True)
+        self.criterion_inter = InterLoss(args.num_class, args.device)
+        self.criterion_intra = IntraLoss(args.num_class, args.device, True)
         # set logger path
         log_num = 0
         while os.path.exists(f"logger/ce_loss/{args.dataset}/v{str(log_num)}"):
             log_num += 1
         self.writer = SummaryWriter(f'logger/ce_loss/{args.dataset}/v{str(log_num)}')
 
+    def decay_cosine(self, t, amp, beta, omega, phi):
+        """model data as decaying cosine wave"""
+        return amp * torch.exp(-beta*t)* torch.cos(omega*t + phi)
+
+
     def training(self, args):
         model = self.model
 
         # set optimizer & scheduler
         optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
-            model, args.lr, self.criterion, args.lr_proposed
+            model, args.lr, inter=self.criterion_inter, inter_lr=args.lr_proposed
         )
 
-        model_path = os.path.join(self.save_path, "pretrained_model_inter_re.pt")
+        model_path = os.path.join(self.save_path, "pretrained_model_inter.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
         self.writer.close()
 
@@ -49,6 +56,13 @@ class Trainer():
 
         # Train target classifier
         lambda_inter_list = torch.cos(torch.arange(0, 3.14/2, 1/(args.epochs*0.5)))
+        # lambda_inter_list = (torch.cos(torch.arange(0, 3.14*3, 1/args.epochs)) + 1) * .5
+        # lambda_inter_list = torch.cos(torch.linspace(0, np.pi/2, 40))
+
+        # create fake data to be fitted
+        # t = torch.linspace(0, args.epochs, args.epochs)
+        # lambda_inter_list = torch.abs(self.decay_cosine(t, 1., 0.1, 2*np.pi, 0.))
+
         for epoch in range(args.epochs):
             if epoch < len(lambda_inter_list):
                 lambda_inter = lambda_inter_list[epoch]
@@ -66,8 +80,10 @@ class Trainer():
                 # Cross entropy loss
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                restricted_loss, inter_loss, center = self.criterion(features, labels)
-                loss = ce_loss + restricted_loss - inter_loss
+                # restricted_loss, inter_loss, center = self.criterion(features, labels)
+                inter_loss, trn_center = self.criterion_inter(features, labels)
+                restricted_loss = self.criterion_intra(features, labels, trn_center)
+                loss = ce_loss + restricted_loss - lambda_inter*inter_loss
 
                 optimizer.zero_grad()
                 optimizer_proposed.zero_grad()
@@ -78,7 +94,7 @@ class Trainer():
 
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
-                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Res: {restricted_loss.item():4f}, Inter: {inter_loss.item():.4f}"
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Res: {restricted_loss.item():4f}, Inter: {inter_loss.item():.4f}, Lambda: {lambda_inter}"
                 )
                 train.update(1)
 
@@ -110,8 +126,11 @@ class Trainer():
 
                     # Cross entropy loss
                     ce_loss = self.criterion_CE(logit, labels)
-                    restricted_loss, inter_loss, _ = self.criterion(features, labels)
+                    # restricted_loss, inter_loss, _ = self.criterion(features, labels)
+                    inter_loss, dev_center = self.criterion_inter(features, labels)
+                    restricted_loss = self.criterion_intra(features, labels, dev_center)
                     loss = ce_loss + restricted_loss - inter_loss
+
                     # Loss
                     _dev_loss += loss
                     dev_loss = _dev_loss/(idx+1)
@@ -147,7 +166,7 @@ class Trainer():
                         "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                         "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
                         "trained_epoch": epoch,
-                        "center": center
+                        "center": trn_center
                     },
                     model_path
                 )
@@ -163,7 +182,7 @@ class Trainer():
                     "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                     "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
                     "trained_epoch": epoch,
-                    "center": center
+                    "center": trn_center
                 },
                 f"{model_path[:-3]}_last.pt"
             )

@@ -103,7 +103,7 @@ def get_optim(model, lr, inter=None, inter_lr=None, intra=None, intra_lr=None):
     elif intra != None:
         print("Create intra optimizer")
         optimizer_intra = optim.SGD(
-           intra.parameters(), lr=intra_lr, momentum=0.99, weight_decay=1e-3
+           intra.parameters(), lr=intra_lr#, momentum=0.99, weight_decay=1e-3
         )
         scheduler_intra = optim.lr_scheduler.ReduceLROnPlateau(
             optimizer_intra, mode='min', factor=0.1, patience=10
@@ -239,8 +239,7 @@ class InterLoss(nn.Module):
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
-        self.threshold = 7 # (torch.mean(center_dist_mat)).detach() * 3
-        print(self.threshold)
+        self.threshold = 5 # (torch.mean(center_dist_mat)).detach() * 3
 
     def forward(self, features, labels):
         inter_loss = self.inter_loss(features, labels)
@@ -259,13 +258,14 @@ class InterLoss(nn.Module):
         batch_center /= label_counts.clamp(min=1)
 
         center += batch_center
-        center /= 2
 
         dist_mat = torch.cdist(
-            center, center, p=2
+            batch_center, batch_center, p=2
         )
-        zero = torch.zeros(1, dtype=torch.float, device=features.device)
-        dist = torch.where(dist_mat < self.threshold, dist_mat, zero)
+        # print("Center")
+        # print(dist_mat)
+        # zero = torch.zeros(1, dtype=torch.float, device=features.device)
+        dist = torch.where(dist_mat < self.threshold, self.threshold-dist_mat, dist_mat-self.threshold)
         loss = torch.mean(dist)
 
         return loss
@@ -283,7 +283,7 @@ class IntraLoss(nn.Module):
             center = torch.randn((num_class, 512), device=device) * weight
             self.center = nn.Parameter(center)
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
-        self.threshold = 5
+        self.threshold = 25
         self.pre = pre
 
     def forward(self, features, labels, center=None):
@@ -291,20 +291,24 @@ class IntraLoss(nn.Module):
             restricted_loss = self.restricted_loss(features, labels, center)
             return restricted_loss
         else:
-            intra_loss = self.intra_loss(features, labels)
+            intra_loss = self.intra_loss(features, labels, center)
             return intra_loss
 
     def intra_loss(self, features, labels, center):
         # dist_mat = torch.cdist(features, self.center, p=2)
-        dist_mat = torch.cdist(features, center, p=2)
+        dist_mat = torch.cdist(features, self.center, p=2)
+        # print("Feature")
+        # print(dist_mat)
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
         loss = (dist_mat*mask).sum() / labels.size(0)
 
         return loss
     # add
     def restricted_loss(self, features, labels, center):
-        # center = center.clone().detach()
-        dist_mat = torch.cdist(features, center, p=2)
+        center = center.clone().detach()
+        # print(self.center)
+        dist_mat = torch.cdist(features, self.center, p=2)
+        # print(dist_mat)
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
 
         masked_dist_mat = (dist_mat*mask)

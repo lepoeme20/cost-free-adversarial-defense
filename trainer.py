@@ -28,10 +28,10 @@ class Trainer():
             log_num += 1
         self.writer = SummaryWriter(f'logger/ce_loss/{args.dataset}/v{str(log_num)}')
 
-    def decay_cosine(self, t, amp, beta, omega, phi):
+    def decay_cosine(self, t, amp=1, beta=1, omega=2*np.pi, phi=0):
         """model data as decaying cosine wave"""
+        # return torch.abs(amp * torch.exp(-beta*t)* torch.cos(omega*t + phi))
         return amp * torch.exp(-beta*t)* torch.cos(omega*t + phi)
-
 
     def training(self, args):
         model = self.model
@@ -55,17 +55,16 @@ class Trainer():
         outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
 
         # Train target classifier
-        lambda_inter_list = torch.cos(torch.arange(0, 3.14/2, 1/(args.epochs*0.5)))
-        # lambda_inter_list = (torch.cos(torch.arange(0, 3.14*3, 1/args.epochs)) + 1) * .5
-        # lambda_inter_list = torch.cos(torch.linspace(0, np.pi/2, 40))
+        # lambda_inter_list = torch.cos(torch.arange(0, np.pi/2, 1/(args.epochs*0.5)))
+        # lambda_inter_list = torch.cos(torch.linspace(0, 3.14/2, 25))
 
         # create fake data to be fitted
         # t = torch.linspace(0, args.epochs, args.epochs)
-        # lambda_inter_list = torch.abs(self.decay_cosine(t, 1., 0.1, 2*np.pi, 0.))
+        # lambda_inter_list = self.decay_cosine(t, 1., 0.1, 2*np.pi, 0.)
 
         for epoch in range(args.epochs):
-            if epoch < len(lambda_inter_list):
-                lambda_inter = lambda_inter_list[epoch]
+            # if epoch < len(lambda_inter_list):
+            #     lambda_inter = lambda_inter_list[epoch]
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
@@ -83,7 +82,7 @@ class Trainer():
                 # restricted_loss, inter_loss, center = self.criterion(features, labels)
                 inter_loss, trn_center = self.criterion_inter(features, labels)
                 restricted_loss = self.criterion_intra(features, labels, trn_center)
-                loss = ce_loss + restricted_loss - lambda_inter*inter_loss
+                loss = ce_loss + restricted_loss + inter_loss
 
                 optimizer.zero_grad()
                 optimizer_proposed.zero_grad()
@@ -94,7 +93,7 @@ class Trainer():
 
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
-                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Res: {restricted_loss.item():4f}, Inter: {inter_loss.item():.4f}, Lambda: {lambda_inter}"
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Res: {restricted_loss.item():4f}, Inter: {inter_loss.item():.4f}"
                 )
                 train.update(1)
 
@@ -110,7 +109,13 @@ class Trainer():
                         metadata=labels.data.cpu().numpy(),
                         label_img=inputs,
                         global_step=current_step,
-                        tag="[TRN]Features",
+                        tag="[TRN] Features",
+                    )
+                    self.writer.add_embedding(
+                        trn_center,
+                        metadata=np.arange(0, args.num_class),
+                        global_step=current_step,
+                        tag="[TRN] Center",
                     )
 
             for idx, (inputs, labels) in enumerate(self.dev_loader, 0):
@@ -129,7 +134,7 @@ class Trainer():
                     # restricted_loss, inter_loss, _ = self.criterion(features, labels)
                     inter_loss, dev_center = self.criterion_inter(features, labels)
                     restricted_loss = self.criterion_intra(features, labels, dev_center)
-                    loss = ce_loss + restricted_loss - inter_loss
+                    loss = ce_loss + restricted_loss + inter_loss
 
                     # Loss
                     _dev_loss += loss
@@ -150,7 +155,7 @@ class Trainer():
                             metadata=labels.data.cpu().numpy(),
                             label_img=inputs,
                             global_step=dev_step,
-                            tag="[DEV]Features",
+                            tag="[DEV] Features",
                         )
 
             if dev_loss < best_loss:

@@ -11,6 +11,7 @@ from utils import (
     Loss,
     InterLoss,
     IntraLoss,
+    get_center
 )
 from attack_methods import pgd, fgsm
 from tqdm import tqdm
@@ -28,16 +29,17 @@ class ProposedTrainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, 'pretrained_model_inter_last.pt')
+        pretrained_path = os.path.join(self.save_path, 'inter_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.center = self.checkpoint["center"]
+        # self.center = get_center(self.model, self.train_loader, args.num_class, args.device)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        # self.criterion = Loss(args.num_class, args.device, pre_center=center)
+        self.criterion = Loss(args.num_class, args.device, pre_center=self.center)
         # self.criterion = Loss(args.num_class, args.device)
-        self.criterion_inter = InterLoss(args.num_class, args.device, self.center)
-        self.criterion_intra = IntraLoss(args.num_class, args.device, False, self.center)
+        # self.criterion_inter = InterLoss(args.num_class, args.device, self.center)
+        # self.criterion_intra = IntraLoss(args.num_class, args.device, False, self.center)
 
         # set logger path
         log_num = 0
@@ -60,17 +62,17 @@ class ProposedTrainer:
         model.module.load_state_dict(self.checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
-        optimizer, scheduler, optimizer_intra, scheduler_intra = get_optim(
-            model, args.lr, intra=self.criterion_intra, intra_lr=args.lr_proposed
+        optimizer, scheduler, optimizer_inter, scheduler_inter = get_optim(
+            model, args.lr, intra=self.criterion, intra_lr=args.lr_proposed
         )
         # optimizer, scheduler = get_optim(
         #     model, args.lr
         # )
-        optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
+        # optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
         # optimizer_inter.load_state_dict(self.checkpoint["optimizer_proposed_state_dict"])
 
         # base model
-        model_name = f"proposed_model_inter.pt"
+        model_name = f"proposed_model.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
@@ -96,7 +98,7 @@ class ProposedTrainer:
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if inputs.size(1) == 1:
-                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     attacker = attack_func(model, args)
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
@@ -104,25 +106,25 @@ class ProposedTrainer:
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
-                logi?!?jedi=0, t, features = model(inputs)?!? (*_**values: object*_*, sep: Optional[Text]=..., end: Optional[Text]=..., file: Optional[_Writer]=..., flush: bool=...) ?!?jedi?!?
+                logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                # intra_loss, inter_loss = self.criterion(features, labels)
+                intra_loss = self.criterion(features, labels, True)
                 # loss = intra_loss
 
-                inter_loss, _ = self.criterion_inter(features, labels)
-                intra_loss = self.criterion_intra(features, labels, self.center)
+                # inter_loss, trn_center = self.criterion_inter(features, labels)
+                # intra_loss = self.criterion_intra(features, labels)
 
                 loss = ce_loss + 2*intra_loss #- inter_loss
 
 
                 optimizer.zero_grad()
-                optimizer_intra.zero_grad()
+                optimizer_inter.zero_grad()
                 loss.backward()
                 optimizer.step()
-                optimizer_intra.step()
+                optimizer_inter.step()
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
-                    f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}"
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}, Inter Loss:"
                 )
                 train.update(1)
 
@@ -141,7 +143,7 @@ class ProposedTrainer:
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if inputs.size(1) == 1:
-                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)
@@ -151,11 +153,11 @@ class ProposedTrainer:
                 with torch.no_grad():
                     logit, features = model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    # intra_loss, inter_loss = self.criterion(features, labels)
+                    intra_loss = self.criterion(features, labels, False)
                     # loss = ce_loss + intra_loss - inter_loss
-                    # inter_loss, _ = self.criterion_inter(features, labels)
-                    intra_loss = self.criterion_intra(features, labels, self.center)
-                    loss = ce_loss + intra_loss# - inter_loss
+                    # inter_loss, dev_center = self.criterion_inter(features, labels)
+                    # intra_loss = self.criterion_intra(features, labels)
+                    loss = ce_loss + intra_loss #- inter_loss
 
                     # Loss
                     _dev_loss += loss
@@ -210,7 +212,7 @@ class ProposedTrainer:
                 self.writer.close()
 
             scheduler.step(dev_loss)
-            scheduler_intra.step(dev_loss)
+            scheduler_inter.step(dev_loss)
             outer.update(1)
 
             # save the last epoch model

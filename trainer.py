@@ -20,8 +20,8 @@ class Trainer():
         os.makedirs(self.save_path, exist_ok=True)
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion_inter = InterLoss(args.num_class, args.device)
-        self.criterion_intra = IntraLoss(args.num_class, args.device, True)
+        self.criterion_proposed = Loss(args.num_class, args.device, pre=True)
+        # self.criterion_intra = IntraLoss(args.num_class, args.device, True)
         # set logger path
         log_num = 0
         while os.path.exists(f"logger/ce_loss/{args.dataset}/v{str(log_num)}"):
@@ -38,10 +38,10 @@ class Trainer():
 
         # set optimizer & scheduler
         optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
-            model, args.lr, inter=self.criterion_inter, inter_lr=args.lr_proposed
+            model, args.lr, inter=self.criterion_proposed, inter_lr=args.lr_proposed
         )
 
-        model_path = os.path.join(self.save_path, "pretrained_model_inter.pt")
+        model_path = os.path.join(self.save_path, "inter_model.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
         self.writer.close()
 
@@ -79,10 +79,14 @@ class Trainer():
                 # Cross entropy loss
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                # restricted_loss, inter_loss, center = self.criterion(features, labels)
-                inter_loss, trn_center = self.criterion_inter(features, labels)
-                restricted_loss = self.criterion_intra(features, labels, trn_center)
-                loss = ce_loss + restricted_loss + inter_loss
+                # restricted_loss, inter_loss, trn_center = self.criterion_proposed(features, labels, True)
+                # inter_loss, trn_center = self.criterion_inter(features, labels)
+                # restricted_loss = self.criterion_intra(features, labels, trn_center)
+                # loss = ce_loss + restricted_loss + inter_loss
+
+                inter_loss = self.criterion_proposed.inter_loss(features, labels, True)
+                trn_center = self.criterion_proposed.center
+                loss = ce_loss + inter_loss
 
                 optimizer.zero_grad()
                 optimizer_proposed.zero_grad()
@@ -93,7 +97,7 @@ class Trainer():
 
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
-                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Res: {restricted_loss.item():4f}, Inter: {inter_loss.item():.4f}"
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
                 )
                 train.update(1)
 
@@ -131,16 +135,19 @@ class Trainer():
 
                     # Cross entropy loss
                     ce_loss = self.criterion_CE(logit, labels)
-                    # restricted_loss, inter_loss, _ = self.criterion(features, labels)
-                    inter_loss, dev_center = self.criterion_inter(features, labels)
-                    restricted_loss = self.criterion_intra(features, labels, dev_center)
-                    loss = ce_loss + restricted_loss + inter_loss
+                    # restricted_loss, inter_loss, dev_center = self.criterion_proposed(features, labels, False)
+                    # inter_loss, dev_center = self.criterion_inter(features, labels)
+                    # restricted_loss = self.criterion_intra(features, labels, dev_center)
+                    # loss = ce_loss + restricted_loss - inter_loss
+
+                    inter_loss = self.criterion_proposed.inter_loss(features, labels, True)
+                    loss = ce_loss + inter_loss
 
                     # Loss
                     _dev_loss += loss
                     dev_loss = _dev_loss/(idx+1)
                     dev_loss_log.set_description_str(
-                        f"[DEV] Total Loss: {dev_loss.item():.4f}, CE: {ce_loss.item():.4f}, Res: {restricted_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
+                        f"[DEV] Total Loss: {dev_loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
                     )
                     #################### Logging ###################
                     dev.update(1)

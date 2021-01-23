@@ -55,7 +55,7 @@ def __get_loader(args, data_name, transformer):
         trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_cpu, drop_last=True
     )
     devloader = torch.utils.data.DataLoader(
-        devset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_cpu
+        devset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_cpu, drop_last=True
     )
     tstloader = torch.utils.data.DataLoader(
         tstset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_cpu
@@ -144,83 +144,110 @@ def __get_dataset_name(args):
     return d_name
 
 
+def get_center(model, data_loader, num_class, device):
+    print("Compute class mean vectors")
+    center = torch.zeros((num_class, 512), device=device)
+    model.eval()
+    with torch.no_grad():
+        for (imgs, labels) in data_loader:
+            imgs = imgs.to(device)
+            labels = labels.to(device)
+            if imgs.size(1) == 1:
+                imgs = imgs.repeat(1, 3, 1, 1)
+
+            _, features = model(imgs)
+
+            label_counts = torch.zeros((num_class, 1), device=labels.device)
+            for label_idx in labels:
+                label_counts[label_idx] += 1
+
+            batch_center = torch.zeros_like(center, device=device)
+            for feature, label_idx in zip(features, labels):
+                batch_center[label_idx] += feature
+            batch_center /= label_counts.clamp(min=1)
+
+            center += batch_center
+    return center/len(data_loader)
+
 
 class Loss(nn.Module):
-    def __init__(self, num_class,device, pre_center=None, pre=False):
+    def __init__(self, num_class, device, pre_center=None, pre=False):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
+        self.zero = torch.zeros(1, dtype=torch.float, device=device)
         if pre_center == None:
             self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
         else:
-            self.center = nn.Parameter(pre_center.data.detach().to(device))
-            # self.center = pre_center.data.detach().to(device)
-            # self.center.requires_grad= False
+            # self.center = nn.Parameter(pre_center.data.detach().to(device))
+            self.center = pre_center.data.detach().to(device)
+            self.center.requires_grad= False
         self.pre = pre
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
         threshold = (torch.mean(center_dist_mat)).detach()
-        self.thres_inter = threshold*5
+        self.thres_inter = threshold*3
         self.thres_rest = threshold/2
 
         # self.empty_parameter = nn.Parameter(torch.tensor([1.]))
 
-    def forward(self, features, labels):
+    def forward(self, features, labels, train=True):
         if self.pre:
             # expansion_loss = self.expansion_loss(features, labels)
-            inter_loss = self.inter_loss(features, labels)
-            intra_loss = self.intra_loss(features, labels)
-            return intra_loss, inter_loss, self.center.data
+            inter_loss = self.inter_loss(features, labels, train)
+            expansion_loss = self.expansion_loss(features, labels, train)
+            return expansion_loss, inter_loss, self.center.data
         else:
-            intra_loss = self.intra_loss(features, labels)
-            inter_loss = self.inter_loss(features, labels)
-            return intra_loss, inter_loss
+            intra_loss = self.intra_loss(features, labels, train)
+            # inter_loss = self.inter_loss(features, labels)
+            return intra_loss#, inter_loss
 
-    def intra_loss(self, features, labels):
-        masked_dist_mat = self._get_masked_dist_mat(features, labels)
+    def intra_loss(self, features, labels, train):
+        masked_dist_mat = self._get_masked_dist_mat(features, labels, train)
         loss = (masked_dist_mat).sum() / labels.size(0)
 
         return loss
 
-    def inter_loss(self, features, labels):
-        center = self.center.data
+    def inter_loss(self, features, labels, train):
+        if train:
+            center = self.center.data
+        else:
+            center = self.center.clone().detach()
         label_counts = torch.zeros((self.num_class, 1), device=labels.device)
         for label_idx in labels:
             label_counts[label_idx] += 1
 
         # added
-        batch_center = torch.zeros_like(center, device=labels.device)
         for feature, label_idx in zip(features, labels):
-            batch_center[label_idx] += feature
-        batch_center /= label_counts.clamp(min=1)
-
-        center += batch_center
-        center /= 2
+            center[label_idx] += feature
+        center /= label_counts.clamp(min=1)
 
         dist_mat = torch.cdist(
             center, center, p=2
         )
-        zero = torch.zeros(1, dtype=torch.float, device=features.device)
-        dist = torch.where(dist_mat < self.thres_inter, dist_mat, zero)
-        inter_loss = torch.mean(dist)
+        dist_mat = torch.where(dist_mat < self.thres_inter, self.thres_inter-dist_mat, self.zero)
+        inter_loss = torch.mean(dist_mat)
         # loss = dist_mat.sum() / (dist_mat.size(0) * dist_mat.size(1))
-        # loss = torch.reciprocal(loss)
+        # inter_loss = torch.reciprocal(inter_loss)
 
         return inter_loss
 
-    def expansion_loss(self, features, labels):
-        masked_dist_mat = self._get_masked_dist_mat(features, labels)
+    def expansion_loss(self, features, labels, train):
+        masked_dist_mat = self._get_masked_dist_mat(features, labels, train)
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
         dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
 
         loss = (dist.sum()/labels.size(0))
-
         return loss
 
-    def _get_masked_dist_mat(self, features, labels):
-        center = self.center.detach()
+    def _get_masked_dist_mat(self, features, labels, train):
+        if train:
+            center = self.center.data
+        else:
+            center = self.center.clone().detach()
+        center = self.center.clone().detach()
         dist_mat = torch.cdist(features, center, p=2)
 
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
@@ -228,14 +255,14 @@ class Loss(nn.Module):
 
 
 class InterLoss(nn.Module):
-    def __init__(self, num_class,device, pre_center=None):
+    def __init__(self, num_class, device, pre_center=None):
         super(InterLoss, self).__init__()
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
         if pre_center == None:
             self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
         else:
-            self.center = pre_center.clone().detach().to(device)
+            self.center = nn.Parameter(pre_center) #pre_center.clone().detach().to(device)
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
@@ -243,7 +270,7 @@ class InterLoss(nn.Module):
 
     def forward(self, features, labels):
         inter_loss = self.inter_loss(features, labels)
-        return inter_loss, self.center.data
+        return inter_loss, self.center.data.clone().detach()
 
     def inter_loss(self, features, labels):
         center = self.center.data
@@ -259,13 +286,11 @@ class InterLoss(nn.Module):
 
         center += batch_center
 
-        dist_mat = torch.cdist(
-            batch_center, batch_center, p=2
-        )
+        dist_mat = torch.cdist(center, center, p=2)
         # print("Center")
         # print(dist_mat)
-        # zero = torch.zeros(1, dtype=torch.float, device=features.device)
-        dist = torch.where(dist_mat < self.threshold, self.threshold-dist_mat, dist_mat-self.threshold)
+        zero = torch.zeros(1, dtype=torch.float, device=features.device)
+        dist = torch.where(dist_mat < self.threshold, self.threshold-dist_mat, zero)
         loss = torch.mean(dist)
 
         return loss
@@ -296,11 +321,13 @@ class IntraLoss(nn.Module):
 
     def intra_loss(self, features, labels, center):
         # dist_mat = torch.cdist(features, self.center, p=2)
-        dist_mat = torch.cdist(features, self.center, p=2)
+        center = self.center.clone().detach()
+        dist_mat = torch.cdist(features, center, p=2)
         # print("Feature")
         # print(dist_mat)
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
-        loss = (dist_mat*mask).sum() / labels.size(0)
+        dist = torch.sum((dist_mat*mask), 1)
+        loss = dist.sum()/labels.size(0)
 
         return loss
     # add

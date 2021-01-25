@@ -55,6 +55,9 @@ def parser_setting(parser):
         help = 'train with proposed loss'
     )
     trn_args.add_argument(
+        '--phase', type=str, choices=['ce', 'inter', 'intra', 'restricted']
+    )
+    trn_args.add_argument(
         '--epochs', type=int, default=300, metavar='N',
         help='number of epochs to train (default: auto)'
         )

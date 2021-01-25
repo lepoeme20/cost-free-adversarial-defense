@@ -6,8 +6,10 @@ import torch
 import random
 import config
 import numpy as np
-from trainer import Trainer
-from proposed_model_trainer import ProposedTrainer
+from trainer import Trainer as inter_trainer
+from ce_loss import Trainer as ce_trainer
+from restricted_model_trainer import Trainer as restricted_trainer
+from proposed_model_trainer import Trainer as intra_trainer
 
 def main():
     args = config.get_config()
@@ -23,11 +25,18 @@ def main():
     random.seed(args.seed)
     os.environ['PYTHONHASHSEED'] = str(args.seed)
 
-    if not args.proposed:
-        trainer = Trainer(args)
+    if args.phase == 'ce':
+        print("Standard model will be trained")
+        trainer = ce_trainer(args)
+    elif args.phase == 'inter':
+        print("Inter loss model will be trained")
+        trainer = inter_trainer(args)
+    elif args.phase == 'restricted':
+        print("Restricted loss model will be trained")
+        trainer = restricted_trainer(args)
     else:
-        print("Proposed model will be trained")
-        trainer = ProposedTrainer(args)
+        print("Intra model will be trained")
+        trainer = intra_trainer(args)
     trainer.training(args)
 
 if __name__ == "__main__":

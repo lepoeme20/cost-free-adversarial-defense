@@ -171,7 +171,7 @@ def get_center(model, data_loader, num_class, device):
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, device, pre_center=None, pre=False):
+    def __init__(self, num_class, device, phase, pre_center=None):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
@@ -182,7 +182,7 @@ class Loss(nn.Module):
             # self.center = nn.Parameter(pre_center.data.detach().to(device))
             self.center = pre_center.data.detach().to(device)
             self.center.requires_grad= False
-        self.pre = pre
+        self.phase = phase
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
@@ -193,12 +193,15 @@ class Loss(nn.Module):
         # self.empty_parameter = nn.Parameter(torch.tensor([1.]))
 
     def forward(self, features, labels, train=True):
-        if self.pre:
+        if self.phase == 'inter':
             # expansion_loss = self.expansion_loss(features, labels)
             inter_loss = self.inter_loss(features, labels, train)
-            expansion_loss = self.expansion_loss(features, labels, train)
-            return expansion_loss, inter_loss, self.center.data
-        else:
+            # expansion_loss = self.expansion_loss(features, labels, train)
+            return inter_loss, self.center.data
+        elif self.phase == 'restricted':
+            restricted_loss = self.expansion_loss(features, labels, train)
+            return restricted_loss
+        elif self.phase == 'intra':
             intra_loss = self.intra_loss(features, labels, train)
             # inter_loss = self.inter_loss(features, labels)
             return intra_loss#, inter_loss

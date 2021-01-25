@@ -17,7 +17,7 @@ from attack_methods import pgd, fgsm
 from tqdm import tqdm
 
 
-class ProposedTrainer:
+class Trainer:
     def __init__(self, args):
         # dataloader
         self.train_loader, self.dev_loader, _ = get_dataloader(args)
@@ -29,14 +29,14 @@ class ProposedTrainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, 'inter_model.pt')
+        pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.center = self.checkpoint["center"]
         # self.center = get_center(self.model, self.train_loader, args.num_class, args.device)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, args.device, pre_center=self.center)
+        self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
         # self.criterion = Loss(args.num_class, args.device)
         # self.criterion_inter = InterLoss(args.num_class, args.device, self.center)
         # self.criterion_intra = IntraLoss(args.num_class, args.device, False, self.center)
@@ -62,17 +62,17 @@ class ProposedTrainer:
         model.module.load_state_dict(self.checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
-        optimizer, scheduler, optimizer_inter, scheduler_inter = get_optim(
-            model, args.lr, intra=self.criterion, intra_lr=args.lr_proposed
-        )
-        # optimizer, scheduler = get_optim(
-        #     model, args.lr
+        # optimizer, scheduler, optimizer_inter, scheduler_inter = get_optim(
+        #     model, args.lr, intra=self.criterion, intra_lr=args.lr_proposed
         # )
+        optimizer, scheduler = get_optim(
+            model, args.lr
+        )
         # optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
         # optimizer_inter.load_state_dict(self.checkpoint["optimizer_proposed_state_dict"])
 
         # base model
-        model_name = f"proposed_model.pt"
+        model_name = f"intra_model.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
@@ -114,17 +114,17 @@ class ProposedTrainer:
                 # inter_loss, trn_center = self.criterion_inter(features, labels)
                 # intra_loss = self.criterion_intra(features, labels)
 
-                loss = ce_loss + 2*intra_loss #- inter_loss
+                loss = 0.5 * ce_loss + 0.95*intra_loss #- inter_loss
 
 
                 optimizer.zero_grad()
-                optimizer_inter.zero_grad()
+                # optimizer_inter.zero_grad()
                 loss.backward()
                 optimizer.step()
-                optimizer_inter.step()
+                # optimizer_inter.step()
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
-                    f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}, Inter Loss:"
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}"
                 )
                 train.update(1)
 
@@ -212,7 +212,7 @@ class ProposedTrainer:
                 self.writer.close()
 
             scheduler.step(dev_loss)
-            scheduler_inter.step(dev_loss)
+            # scheduler_inter.step(dev_loss)
             outer.update(1)
 
             # save the last epoch model

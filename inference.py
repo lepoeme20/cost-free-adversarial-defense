@@ -8,15 +8,14 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-from utils import network_initialization, get_dataloader
+from utils import network_initialization, get_dataloader, get_m_s, norm, get_center
 import config
 from attack_methods import pgd, fgsm, cw, bim
-from utils import get_m_s, norm
 
 
 class Test:
     def __init__(self, args):
-        self.args = args
+        # self.args = args
         self.model = network_initialization(args)
         model_path = os.path.join(
             args.save_path,
@@ -30,27 +29,29 @@ class Test:
         return model
 
     def attack(self, target_cls, dataloader):
-        attack_module = globals()[self.args.attack_name.lower()]
-        attack_func = getattr(attack_module, self.args.attack_name)
-        attacker = attack_func(target_cls, self.args)
-        save_path = os.path.join("Adv_examples", self.args.dataset.lower())
+        attack_module = globals()[args.attack_name.lower()]
+        attack_func = getattr(attack_module, args.attack_name)
+        attacker = attack_func(target_cls, args)
+        save_path = os.path.join("Adv_examples", args.dataset.lower())
         attacker.inference(
             args,
             data_loader=dataloader,
             save_path=save_path,
-            file_name=self.args.attack_name + ".pt",
+            file_name=args.attack_name + ".pt",
         )
 
     def testing(self):
-        # inter_model을 사용하고 싶은 경우 self.total_path > self.pre_path 변경
         model = self.load_model(self.model, self.model_path)
 
         args.batch_size = args.test_batch_size
-        _, _, tst_loader = get_dataloader(self.args)
+        train_loader, _, tst_loader = get_dataloader(args)
         m, s = get_m_s(args)
 
         # 정상 데이터에 대한 모델 성능 확인
-        if self.args.attack_name.lower() == "clean":
+        if args.attack_name.lower() == "clean":
+            # center = get_center(model, train_loader, args.num_class, args.device)
+            # dist = torch.cdist(center, center, p=2)
+            # print(dist)
             correct = 0
             accumulated_num = 0.0
             total_num = len(tst_loader)

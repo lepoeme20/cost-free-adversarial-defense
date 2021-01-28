@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from utils import network_initialization, get_dataloader
 from torch.utils.tensorboard import SummaryWriter
-from utils import get_m_s, norm, get_optim, Loss, InterLoss, IntraLoss
+from utils import get_m_s, norm, get_optim, Loss, InterLoss, IntraLoss, get_center
 from tqdm import tqdm
 
 
@@ -16,22 +16,24 @@ class Trainer():
         self.model = network_initialization(args)
         # get mean and std for normalization
         self.m, self.s = get_m_s(args)
+
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
+
+        pretrained_path = os.path.join(self.save_path, 'ce_loss.pt')
+        self.checkpoint = torch.load(pretrained_path)
+        self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
+        self.center = get_center(self.model, self.train_loader, args.num_class, args.device)
+
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion_proposed = Loss(args.num_class, args.device, pre=True)
-        # self.criterion_intra = IntraLoss(args.num_class, args.device, True)
+        self.criterion_proposed = Loss(args.num_class, args.device, phase=args.phase)
+
         # set logger path
         log_num = 0
         while os.path.exists(f"logger/ce_loss/{args.dataset}/v{str(log_num)}"):
             log_num += 1
         self.writer = SummaryWriter(f'logger/ce_loss/{args.dataset}/v{str(log_num)}')
-
-    def decay_cosine(self, t, amp=1, beta=1, omega=2*np.pi, phi=0):
-        """model data as decaying cosine wave"""
-        # return torch.abs(amp * torch.exp(-beta*t)* torch.cos(omega*t + phi))
-        return amp * torch.exp(-beta*t)* torch.cos(omega*t + phi)
 
     def training(self, args):
         model = self.model
@@ -54,17 +56,7 @@ class Trainer():
         best_epoch_log = tqdm(total=0, position=5, bar_format='{desc}')
         outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
 
-        # Train target classifier
-        # lambda_inter_list = torch.cos(torch.arange(0, np.pi/2, 1/(args.epochs*0.5)))
-        # lambda_inter_list = torch.cos(torch.linspace(0, 3.14/2, 25))
-
-        # create fake data to be fitted
-        # t = torch.linspace(0, args.epochs, args.epochs)
-        # lambda_inter_list = self.decay_cosine(t, 1., 0.1, 2*np.pi, 0.)
-
         for epoch in range(args.epochs):
-            # if epoch < len(lambda_inter_list):
-            #     lambda_inter = lambda_inter_list[epoch]
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
@@ -79,11 +71,6 @@ class Trainer():
                 # Cross entropy loss
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                # restricted_loss, inter_loss, trn_center = self.criterion_proposed(features, labels, True)
-                # inter_loss, trn_center = self.criterion_inter(features, labels)
-                # restricted_loss = self.criterion_intra(features, labels, trn_center)
-                # loss = ce_loss + restricted_loss + inter_loss
-
                 inter_loss = self.criterion_proposed.inter_loss(features, labels, True)
                 trn_center = self.criterion_proposed.center
                 loss = ce_loss + inter_loss

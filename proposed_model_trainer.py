@@ -32,14 +32,10 @@ class Trainer:
         pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.center = self.checkpoint["center"]
-        # self.center = get_center(self.model, self.train_loader, args.num_class, args.device)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
         self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
-        # self.criterion = Loss(args.num_class, args.device)
-        # self.criterion_inter = InterLoss(args.num_class, args.device, self.center)
-        # self.criterion_intra = IntraLoss(args.num_class, args.device, False, self.center)
 
         # set logger path
         log_num = 0
@@ -62,14 +58,10 @@ class Trainer:
         model.module.load_state_dict(self.checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
-        # optimizer, scheduler, optimizer_inter, scheduler_inter = get_optim(
-        #     model, args.lr, intra=self.criterion, intra_lr=args.lr_proposed
-        # )
         optimizer, scheduler = get_optim(
             model, args.lr
         )
-        # optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
-        # optimizer_inter.load_state_dict(self.checkpoint["optimizer_proposed_state_dict"])
+        optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
         # base model
         model_name = f"intra_model.pt"
@@ -109,19 +101,12 @@ class Trainer:
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels, True)
-                # loss = intra_loss
 
-                # inter_loss, trn_center = self.criterion_inter(features, labels)
-                # intra_loss = self.criterion_intra(features, labels)
-
-                loss = 0.5 * ce_loss + 0.95*intra_loss #- inter_loss
-
+                loss = 0.05*ce_loss + 0.95*intra_loss
 
                 optimizer.zero_grad()
-                # optimizer_inter.zero_grad()
                 loss.backward()
                 optimizer.step()
-                # optimizer_inter.step()
                 #################### Logging ###################
                 trn_loss_log.set_description_str(
                     f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Intra Loss: {intra_loss.item():.4f}"
@@ -154,10 +139,7 @@ class Trainer:
                     logit, features = model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
                     intra_loss = self.criterion(features, labels, False)
-                    # loss = ce_loss + intra_loss - inter_loss
-                    # inter_loss, dev_center = self.criterion_inter(features, labels)
-                    # intra_loss = self.criterion_intra(features, labels)
-                    loss = ce_loss + intra_loss #- inter_loss
+                    loss = ce_loss + intra_loss
 
                     # Loss
                     _dev_loss += loss
@@ -182,9 +164,7 @@ class Trainer:
                     {
                         "model_state_dict": model.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
-                        # "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
-                        # "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
                         "trained_epoch": epoch
                     },
                     model_path
@@ -212,7 +192,6 @@ class Trainer:
                 self.writer.close()
 
             scheduler.step(dev_loss)
-            # scheduler_inter.step(dev_loss)
             outer.update(1)
 
             # save the last epoch model
@@ -221,9 +200,7 @@ class Trainer:
                 {
                     "model_state_dict": model.module.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    # "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
                     "scheduler_state_dict": scheduler.state_dict(),
-                    # "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
                     "trained_epoch": epoch
                 },
                 save_last_path

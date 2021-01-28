@@ -6,7 +6,6 @@ import torchvision
 from torchvision import transforms
 from resnet110 import resnet
 from resnet import resnet34, resnet18
-from smallnet import small_resnet
 import torch.nn.functional as F
 
 
@@ -15,7 +14,7 @@ def network_initialization(args):
 
     # Using multi GPUs if you have
     if torch.cuda.device_count() > 0:
-       net = nn.DataParallel(net, device_ids=args.device_ids)
+        net = nn.DataParallel(net, device_ids=args.device_ids)
 
     # change device to set device (CPU or GPU)
     net.to(args.device)
@@ -179,18 +178,15 @@ class Loss(nn.Module):
         if pre_center == None:
             self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
         else:
-            # self.center = nn.Parameter(pre_center.data.detach().to(device))
-            self.center = pre_center.data.detach().to(device)
-            self.center.requires_grad= False
+            self.center = nn.Parameter(pre_center.data.detach().to(device))
         self.phase = phase
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
         threshold = (torch.mean(center_dist_mat)).detach()
         self.thres_inter = threshold*3
-        self.thres_rest = threshold/2
-
-        # self.empty_parameter = nn.Parameter(torch.tensor([1.]))
+        # self.thres_inter = 3
+        self.thres_rest = threshold/3
 
     def forward(self, features, labels, train=True):
         if self.phase == 'inter':
@@ -231,8 +227,6 @@ class Loss(nn.Module):
         )
         dist_mat = torch.where(dist_mat < self.thres_inter, self.thres_inter-dist_mat, self.zero)
         inter_loss = torch.mean(dist_mat)
-        # loss = dist_mat.sum() / (dist_mat.size(0) * dist_mat.size(1))
-        # inter_loss = torch.reciprocal(inter_loss)
 
         return inter_loss
 
@@ -253,6 +247,8 @@ class Loss(nn.Module):
         center = self.center.clone().detach()
         dist_mat = torch.cdist(features, center, p=2)
 
+        # center_dist = torch.cdist(center, center, p=2)
+        # print(center_dist)
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
         return (dist_mat*mask)
 

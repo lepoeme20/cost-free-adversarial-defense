@@ -27,7 +27,7 @@ class Trainer():
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion_proposed = Loss(args.num_class, args.device, phase=args.phase)
+        self.criterion_proposed = Loss(args.num_class, args.device, phase=args.phase, pre_center=self.center)
 
         # set logger path
         log_num = 0

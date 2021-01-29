@@ -6,8 +6,8 @@ import torch
 import random
 import config
 import numpy as np
-from trainer import Trainer as inter_trainer
 from ce_loss import Trainer as ce_trainer
+from inter_model_trainer import Trainer as inter_trainer
 from restricted_model_trainer import Trainer as restricted_trainer
 from proposed_model_trainer import Trainer as intra_trainer
 

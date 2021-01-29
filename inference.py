@@ -21,7 +21,7 @@ class Test:
             args.save_path,
             args.dataset,
         )
-        self.model_path = os.path.join(model_path, f"{args.test_model}.pt")
+        self.model_path = os.path.join(model_path, f"{args.test_model}_model.pt")
 
     def load_model(self, model, load_path):
         checkpoint = torch.load(load_path)

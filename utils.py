@@ -173,6 +173,8 @@ def create_center(model, data_loader):
     sample, _ = next(iter(data_loader))
     model.eval()
     with torch.no_grad():
+        if sample.size(1) == 1:
+            sample = sample.repeat(1, 3, 1, 1)
         _, features = model(sample)
         rand_rows = torch.randperm(features.size(0))[:10]
         center = features[rand_rows, :]
@@ -196,7 +198,8 @@ class Loss(nn.Module):
         threshold = (torch.mean(center_dist_mat)).detach()
         self.thres_inter = threshold*3
         # self.thres_inter = 3
-        self.thres_rest = threshold/3
+        # self.thres_rest = threshold/3
+        self.thres_rest = 1.5
 
     def forward(self, features, labels, train=True):
         if self.phase == 'inter':

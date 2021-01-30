@@ -20,7 +20,7 @@ class Trainer():
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, 'ce_loss.pt')
+        pretrained_path = os.path.join(self.save_path, 'ce_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         # self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
         # self.center = get_center(self.model, self.train_loader, args.num_class, args.device)

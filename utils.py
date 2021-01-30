@@ -168,6 +168,16 @@ def get_center(model, data_loader, num_class, device):
             center += batch_center
     return center/len(data_loader)
 
+def create_center(model, data_loader):
+    print("Initialize class mean vectors")
+    sample, _ = next(iter(data_loader))
+    model.eval()
+    with torch.no_grad():
+        _, features = model(sample)
+        rand_rows = torch.randperm(features.size(0))[:10]
+        center = features[rand_rows, :]
+    return center
+
 
 class Loss(nn.Module):
     def __init__(self, num_class, device, phase, pre_center=None):

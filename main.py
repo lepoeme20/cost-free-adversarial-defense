@@ -9,7 +9,7 @@ import numpy as np
 from ce_loss import Trainer as ce_trainer
 from inter_model_trainer import Trainer as inter_trainer
 from restricted_model_trainer import Trainer as restricted_trainer
-from proposed_model_trainer import Trainer as intra_trainer
+from intra_model_trainer import Trainer as intra_trainer
 
 def main():
     args = config.get_config()
@@ -17,12 +17,14 @@ def main():
     if args.device != 'cpu':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.enabled = False
 
+    # set seed for reproducibility
+    random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
-    random.seed(args.seed)
     os.environ['PYTHONHASHSEED'] = str(args.seed)
 
     if args.phase == 'ce':

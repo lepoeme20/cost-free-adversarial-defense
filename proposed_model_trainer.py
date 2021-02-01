@@ -40,13 +40,13 @@ class Trainer:
         # set logger path
         log_num = 0
         if args.adv_train:
-            while os.path.exists(f"logger/proposed/{args.dataset}/adv_train/v{str(log_num)}"):
+            while os.path.exists(f"logger/proposed/intra_loss/{args.dataset}/adv_train/v{str(log_num)}"):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/{args.dataset}/adv_train/v{str(log_num)}")
+            self.writer = SummaryWriter(f"logger/proposed/intra_loss/{args.dataset}/adv_train/v{str(log_num)}")
         else:
-            while os.path.exists(f"logger/proposed/{args.dataset}/v{str(log_num)}"):
+            while os.path.exists(f"logger/proposed/intra_loss/{args.dataset}/v{str(log_num)}"):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/{args.dataset}/v{str(log_num)}")
+            self.writer = SummaryWriter(f"logger/proposed/intra_loss/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
         model = self.model

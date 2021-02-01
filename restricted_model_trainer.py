@@ -32,25 +32,20 @@ class Trainer:
         pretrained_path = os.path.join(self.save_path, 'inter_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.center = self.checkpoint["center"]
-        # self.center = get_center(self.model, self.train_loader, args.num_class, args.device)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
         self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
-        # self.criterion = Loss(args.num_class, args.device)
-        # self.criterion_inter = InterLoss(args.num_class, args.device, self.center)
-        # self.criterion_intra = IntraLoss(args.num_class, args.device, False, self.center)
-
         # set logger path
         log_num = 0
         if args.adv_train:
-            while os.path.exists(f"logger/proposed/{args.dataset}/adv_train/v{str(log_num)}"):
+            while os.path.exists(f"logger/proposed/restricted_loss/{args.dataset}/adv_train/v{str(log_num)}"):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/{args.dataset}/adv_train/v{str(log_num)}")
+            self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/adv_train/v{str(log_num)}")
         else:
-            while os.path.exists(f"logger/proposed/{args.dataset}/v{str(log_num)}"):
+            while os.path.exists(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}"):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/{args.dataset}/v{str(log_num)}")
+            self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
         model = self.model

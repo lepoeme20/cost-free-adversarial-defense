@@ -3,6 +3,7 @@
 import argparse
 import multiprocessing
 import torch
+import torch.distributed as dist
 
 
 def str2float(s):
@@ -17,13 +18,16 @@ def parser_setting(parser):
     """
     base_args = parser.add_argument_group('base arguments')
     base_args.add_argument(
+        '--local_rank', type=int, default=-1, metavar='N', help='Local process rank.'
+    )
+    base_args.add_argument(
         '--save-path', type=str, default='./bestmodel',
         help='save path for best model'
-        )
+    )
     base_args.add_argument(
         '--workers', type=int, default=multiprocessing.cpu_count()-1, metavar='N',
         help='dataloader threads'
-        )
+    )
     base_args.add_argument(
         '--padding', type=int, default=4, help='base padding size'
         )
@@ -156,7 +160,11 @@ def get_config():
     default_parser = parser_setting(parser)
     args, _ = default_parser.parse_known_args()
 
-    args.device = torch.device(f'cuda:{args.device_ids[0]}' if torch.cuda.is_available else 'cpu')
+    args.is_master = args.local_rank == 0
+    args.device = torch.device("cuda:{}".format(args.local_rank))
+    # args.device = torch.device(f'cuda:{args.device_ids[0]}' if torch.cuda.is_available else 'cpu')
+    torch.distributed.init_process_group(backend="nccl")
+    torch.cuda.set_device(args.local_rank)
 
     # input channels
     args.rgb = 1 if 'mnist' in args.dataset else 3

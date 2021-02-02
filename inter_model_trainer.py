@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.distributed as dist
 from utils import network_initialization, get_dataloader
 from torch.utils.tensorboard import SummaryWriter
 from utils import get_m_s, norm, get_optim, Loss, InterLoss, IntraLoss, get_center, create_center
@@ -20,7 +21,7 @@ class Trainer():
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        self.center = create_center(self.model, self.train_loader)
+        self.center = create_center(self.model, self.train_loader, device=args.device)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
@@ -57,6 +58,10 @@ class Trainer():
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
+
+            # let all processes sync up before starting with a new epoch of training
+            dist.barrier()
+
             for step, (inputs, labels) in enumerate(self.train_loader, 0):
                 model.train()
                 current_step += 1
@@ -80,31 +85,32 @@ class Trainer():
                 optimizer_proposed.step()
 
                 #################### Logging ###################
-                trn_loss_log.set_description_str(
-                    f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
-                )
-                train.update(1)
+                if args.local_rank == 0:
+                    trn_loss_log.set_description_str(
+                        f"[TRN] Total Loss: {loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
+                    )
+                    train.update(1)
 
-                # tensorboard logging
-                if current_step == 1 or current_step % len(self.train_loader) == 0:
-                    self.writer.add_scalar(
-                        tag="[TRN] loss", scalar_value=loss.item(), global_step=current_step
-                    )
+                    # tensorboard logging
+                    if current_step == 1 or current_step % len(self.train_loader) == 0:
+                        self.writer.add_scalar(
+                            tag="[TRN] loss", scalar_value=loss.item(), global_step=current_step
+                        )
 
-                if current_step == 1 or current_step % (len(self.train_loader)*1) == 0:
-                    self.writer.add_embedding(
-                        features,
-                        metadata=labels.data.cpu().numpy(),
-                        label_img=inputs,
-                        global_step=current_step,
-                        tag="[TRN] Features",
-                    )
-                    self.writer.add_embedding(
-                        trn_center,
-                        metadata=np.arange(0, args.num_class),
-                        global_step=current_step,
-                        tag="[TRN] Center",
-                    )
+                    if current_step == 1 or current_step % (len(self.train_loader)*1) == 0:
+                        self.writer.add_embedding(
+                            features,
+                            metadata=labels.data.cpu().numpy(),
+                            label_img=inputs,
+                            global_step=current_step,
+                            tag="[TRN] Features",
+                        )
+                        self.writer.add_embedding(
+                            trn_center,
+                            metadata=np.arange(0, args.num_class),
+                            global_step=current_step,
+                            tag="[TRN] Center",
+                        )
 
             for idx, (inputs, labels) in enumerate(self.dev_loader, 0):
                 model.eval()
@@ -119,37 +125,34 @@ class Trainer():
 
                     # Cross entropy loss
                     ce_loss = self.criterion_CE(logit, labels)
-                    # restricted_loss, inter_loss, dev_center = self.criterion_proposed(features, labels, False)
-                    # inter_loss, dev_center = self.criterion_inter(features, labels)
-                    # restricted_loss = self.criterion_intra(features, labels, dev_center)
-                    # loss = ce_loss + restricted_loss - inter_loss
-
                     inter_loss = self.criterion_proposed.inter_loss(features, labels, True)
                     loss = ce_loss + inter_loss
 
                     # Loss
                     _dev_loss += loss
                     dev_loss = _dev_loss/(idx+1)
-                    dev_loss_log.set_description_str(
-                        f"[DEV] Total Loss: {dev_loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
-                    )
-                    #################### Logging ###################
-                    dev.update(1)
-                    if dev_step == 1 or dev_step % len(self.dev_loader) == 0:
-                        self.writer.add_scalar(
-                            tag="[DEV] loss", scalar_value=loss.item(), global_step=dev_step
-                        )
 
-                    if dev_step == 1 or dev_step % (len(self.dev_loader)*10) == 0:
-                        self.writer.add_embedding(
-                            features,
-                            metadata=labels.data.cpu().numpy(),
-                            label_img=inputs,
-                            global_step=dev_step,
-                            tag="[DEV] Features",
+                    if args.local_rank == 0:
+                        dev_loss_log.set_description_str(
+                            f"[DEV] Total Loss: {dev_loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
                         )
+                        #################### Logging ###################
+                        dev.update(1)
+                        if dev_step == 1 or dev_step % len(self.dev_loader) == 0:
+                            self.writer.add_scalar(
+                                tag="[DEV] loss", scalar_value=loss.item(), global_step=dev_step
+                            )
 
-            if dev_loss < best_loss:
+                        if dev_step == 1 or dev_step % (len(self.dev_loader)*10) == 0:
+                            self.writer.add_embedding(
+                                features,
+                                metadata=labels.data.cpu().numpy(),
+                                label_img=inputs,
+                                global_step=dev_step,
+                                tag="[DEV] Features",
+                            )
+
+            if args.local_rank == 0 and dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -170,15 +173,3 @@ class Trainer():
             scheduler.step(dev_loss)
             scheduler_proposed.step(dev_loss)
             outer.update(1)
-            torch.save(
-                {
-                    "model_state_dict": model.module.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "scheduler_state_dict": scheduler.state_dict(),
-                    "optimizer_proposed_state_dict": optimizer_proposed.state_dict(),
-                    "scheduler_proposed_state_dict": scheduler_proposed.state_dict(),
-                    "trained_epoch": epoch,
-                    "center": trn_center
-                },
-                f"{model_path[:-3]}_last.pt"
-            )

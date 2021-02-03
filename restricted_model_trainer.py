@@ -31,8 +31,7 @@ class Trainer:
         os.makedirs(self.save_path, exist_ok=True)
 
         pretrained_path = os.path.join(self.save_path, 'inter_model.pt')
-        map_location='cuda:{}'.format(args.local_rank)
-        self.checkpoint = torch.load(pretrained_path, map_location=map_location)
+        self.checkpoint = torch.load(pretrained_path)
         self.center = self.checkpoint["center"]
 
         # set criterion
@@ -40,15 +39,14 @@ class Trainer:
         self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
         # set logger path
         log_num = 0
-        if args.local_rank == 0:
-            if args.adv_train:
-                while os.path.exists(f"logger/proposed/restricted_loss/{args.dataset}/adv_train/v{str(log_num)}"):
-                    log_num += 1
-                self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/adv_train/v{str(log_num)}")
-            else:
-                while os.path.exists(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}"):
-                    log_num += 1
-                self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}")
+        if args.adv_train:
+            while os.path.exists(f"logger/proposed/restricted_loss/{args.dataset}/adv_train/v{str(log_num)}"):
+                log_num += 1
+            self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/adv_train/v{str(log_num)}")
+        else:
+            while os.path.exists(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}"):
+                log_num += 1
+            self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
         model = self.model
@@ -69,8 +67,7 @@ class Trainer:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
 
-        if args.local_rank == 0:
-            self.writer.add_text(tag="argument", text_string=str(args.__dict__))
+        self.writer.add_text(tag="argument", text_string=str(args.__dict__))
         best_loss = 1000
         current_step = 0
         dev_step = 0
@@ -85,9 +82,6 @@ class Trainer:
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
-
-            # let all processes sync up before starting with a new epoch of training
-            dist.barrier()
 
             for step, (inputs, labels) in enumerate(self.train_loader):
                 model.train()
@@ -113,25 +107,24 @@ class Trainer:
                 loss.backward()
                 optimizer.step()
                 #################### Logging ###################
-                if args.local_rank == 0:
-                    trn_loss_log.set_description_str(
-                        f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Restricted Loss: {restricted_loss.item():.4f}"
+                trn_loss_log.set_description_str(
+                    f"[TRN] Total Loss: {loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Restricted Loss: {restricted_loss.item():.4f}"
+                )
+                train.update(1)
+                # tensorboard logging
+                if current_step == 1 or current_step % len(self.train_loader) == 0:
+                    self.writer.add_scalar(
+                        tag="[TRN] loss", scalar_value=loss.item(), global_step=current_step
                     )
-                    train.update(1)
-                    # tensorboard logging
-                    if current_step == 1 or current_step % len(self.train_loader) == 0:
-                        self.writer.add_scalar(
-                            tag="[TRN] loss", scalar_value=loss.item(), global_step=current_step
-                        )
 
-                    if current_step == 1 or current_step % (len(self.train_loader)*1) == 0:
-                        self.writer.add_embedding(
-                            features,
-                            metadata=labels.data.cpu().numpy(),
-                            label_img=inputs,
-                            global_step=current_step,
-                            tag="[TRN] Features",
-                        )
+                if current_step == 1 or current_step % (len(self.train_loader)*1) == 0:
+                    self.writer.add_embedding(
+                        features,
+                        metadata=labels.data.cpu().numpy(),
+                        label_img=inputs,
+                        global_step=current_step,
+                        tag="[TRN] Features",
+                    )
 
             for idx, (inputs, labels) in enumerate(self.dev_loader):
                 model.eval()
@@ -155,27 +148,26 @@ class Trainer:
                     _dev_loss += loss
                     dev_loss = _dev_loss / (idx + 1)
 
-                    if args.local_rank == 0:
-                        dev_loss_log.set_description_str(
-                            f"[DEV] Total Loss: {dev_loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Restricted Loss: {restricted_loss.item():.4f}"
+                    dev_loss_log.set_description_str(
+                        f"[DEV] Total Loss: {dev_loss.item():.4f}, CE Loss: {ce_loss.item():.4f}, Restricted Loss: {restricted_loss.item():.4f}"
+                    )
+                    #################### Logging ###################
+                    dev.update(1)
+                    if dev_step == 1 or dev_step % len(self.dev_loader) == 0:
+                        self.writer.add_scalar(
+                            tag="[DEV] loss", scalar_value=loss.item(), global_step=dev_step
                         )
-                        #################### Logging ###################
-                        dev.update(1)
-                        if dev_step == 1 or dev_step % len(self.dev_loader) == 0:
-                            self.writer.add_scalar(
-                                tag="[DEV] loss", scalar_value=loss.item(), global_step=dev_step
-                            )
 
-                        if dev_step == 1 or dev_step % (len(self.dev_loader)*10) == 0:
-                            self.writer.add_embedding(
-                                features,
-                                metadata=labels.data.cpu().numpy(),
-                                label_img=inputs,
-                                global_step=dev_step,
-                                tag="[DEV] Features",
-                            )
+                    if dev_step == 1 or dev_step % (len(self.dev_loader)*10) == 0:
+                        self.writer.add_embedding(
+                            features,
+                            metadata=labels.data.cpu().numpy(),
+                            label_img=inputs,
+                            global_step=dev_step,
+                            tag="[DEV] Features",
+                        )
 
-            if args.local_rank == 0 and dev_loss < best_loss:
+            if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )

@@ -15,17 +15,11 @@ def network_initialization(args):
     net = resnet34(args.num_class)
 
     # Using multi GPUs if you have
-    # if torch.cuda.device_count() > 0:
-    #     net = nn.DataParallel(net, device_ids=args.device_ids)
+    if torch.cuda.device_count() > 0:
+        net = nn.DataParallel(net, device_ids=args.device_ids)
 
     # change device to set device (CPU or GPU)
     net.to(args.device)
-
-    net = DDP(
-        net,
-        device_ids=[args.local_rank],
-        output_device=args.local_rank
-    )
 
     return net
 
@@ -58,12 +52,10 @@ def __get_loader(args, data_name, transformer):
         root=data_path, download=False, train=False, transform=tst_transform
     )
 
-    trn_sampler = DistributedSampler(trainset)
-
     trainloader = torch.utils.data.DataLoader(
         trainset,
         batch_size=args.batch_size,
-        sampler=trn_sampler,
+        shuffle=True,
         num_workers=args.n_cpu,
     )
     devloader = torch.utils.data.DataLoader(
@@ -218,13 +210,9 @@ class Loss(nn.Module):
         )
         print(center_dist_mat)
         threshold = (torch.mean(center_dist_mat)).detach()
-        self.thres_inter = threshold*3
-        self.thres_rest = threshold/3
-        # self.thres_inter = 8
-        # self.thres_rest = 2
-        print(self.thres_inter)
-        print(self.thres_rest)
-
+        # self.thres_inter = threshold*3
+        self.thres_inter = torch.tensor(3.95, device=device)
+        self.thres_rest = torch.tensor(1.35, device=device)
 
     def forward(self, features, labels, train=True):
         if self.phase == 'inter':

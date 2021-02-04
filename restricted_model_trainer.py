@@ -10,9 +10,6 @@ from utils import (
     norm,
     get_optim,
     Loss,
-    InterLoss,
-    IntraLoss,
-    get_center
 )
 from attack_methods import pgd, fgsm
 from tqdm import tqdm

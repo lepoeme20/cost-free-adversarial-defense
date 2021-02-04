@@ -10,9 +10,6 @@ from utils import (
     norm,
     get_optim,
     Loss,
-    InterLoss,
-    IntraLoss,
-    get_center
 )
 from attack_methods import pgd, fgsm
 from tqdm import tqdm
@@ -152,7 +149,7 @@ class Trainer:
                     dev_loss = _dev_loss / (idx + 1)
 
                     dev_loss_log.set_description_str(
-                        f"[DEV] Loss: {dev_loss:.4f}"
+                        f"[DEV] CE Loss: {ce_loss.item():.4f} Intra Loss: {intra_loss.item():.4f}"
                     )
 
                     #################### Logging ###################
@@ -173,7 +170,7 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            if dev_loss < best_loss:
+            if epoch >= 50 and dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -186,6 +183,7 @@ class Trainer:
                         "trained_epoch": epoch
                     },
                     model_path[:-3] + '_' + str(epoch) + '.pt'
+                    # model_path
                 )
 
             scheduler.step(dev_loss)

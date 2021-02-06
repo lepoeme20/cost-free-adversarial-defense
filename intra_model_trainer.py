@@ -101,7 +101,7 @@ class Trainer:
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels, True)
 
-                loss = 0.05*ce_loss + 0.95*intra_loss
+                loss = ce_loss + intra_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -170,7 +170,7 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            if epoch >= 50 and dev_loss < best_loss:
+            if epoch > 50 and dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )

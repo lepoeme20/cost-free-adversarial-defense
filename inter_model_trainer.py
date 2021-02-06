@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from utils import network_initialization, get_dataloader
 from torch.utils.tensorboard import SummaryWriter
-from utils import get_m_s, norm, get_optim, Loss, create_center
+from utils import get_m_s, norm, get_optim, Loss, get_center, create_center
 from tqdm import tqdm
 
 
@@ -20,11 +20,11 @@ class Trainer():
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        self.center = create_center(self.model, self.train_loader, device=args.device)
+        self.center = create_center(self.model, self.train_loader, args.device)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, args.device, phase=args.phase, pre_center=self.center)
+        self.criterion_proposed = Loss(args.num_class, args.device, phase=args.phase, pre_center=self.center)
 
         # set logger path
         log_num = 0
@@ -37,12 +37,12 @@ class Trainer():
 
         # set optimizer & scheduler
         optimizer, scheduler, optimizer_proposed, scheduler_proposed = get_optim(
-            model, args.lr, inter=self.criterion, inter_lr=args.lr_proposed
+            model, args.lr, inter=self.criterion_proposed, inter_lr=args.lr_proposed
         )
 
         model_path = os.path.join(self.save_path, "inter_model.pt")
-        if args.local_rank == 0:
-            self.writer.add_text(tag='argument', text_string=str(args.__dict__))
+        self.writer.add_text(tag='argument', text_string=str(args.__dict__))
+        self.writer.close()
 
         best_loss = 1000
         current_step = 0
@@ -57,7 +57,6 @@ class Trainer():
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
-
             for step, (inputs, labels) in enumerate(self.train_loader, 0):
                 model.train()
                 current_step += 1
@@ -69,7 +68,8 @@ class Trainer():
                 # Cross entropy loss
                 logit, features = model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                inter_loss, trn_center = self.criterion(features, labels, True)
+                inter_loss = self.criterion_proposed.inter_loss(features, labels, True)
+                trn_center = self.criterion_proposed.center
                 loss = ce_loss + inter_loss
 
                 optimizer.zero_grad()
@@ -119,13 +119,12 @@ class Trainer():
 
                     # Cross entropy loss
                     ce_loss = self.criterion_CE(logit, labels)
-                    inter_loss, _ = self.criterion(features, labels, False)
+                    inter_loss = self.criterion_proposed.inter_loss(features, labels, True)
                     loss = ce_loss + inter_loss
 
                     # Loss
                     _dev_loss += loss
                     dev_loss = _dev_loss/(idx+1)
-
                     dev_loss_log.set_description_str(
                         f"[DEV] Total Loss: {dev_loss.item():.4f}, CE: {ce_loss.item():.4f}, Inter: {inter_loss.item():.4f}"
                     )

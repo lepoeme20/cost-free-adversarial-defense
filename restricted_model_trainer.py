@@ -138,7 +138,7 @@ class Trainer:
                 with torch.no_grad():
                     logit, features = model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    restricted_loss = self.criterion(features, labels, False)
+                    restricted_loss  = self.criterion(features, labels, False)
                     loss = ce_loss + restricted_loss #- inter_loss
 
                     # Loss

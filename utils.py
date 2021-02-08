@@ -7,8 +7,6 @@ from torchvision import transforms
 from resnet110 import resnet
 from resnet import resnet34, resnet18
 import torch.nn.functional as F
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
 
 
 def network_initialization(args):
@@ -42,33 +40,24 @@ def __get_loader(args, data_name, transformer):
     # call dataset
     # normal training set
     trainset = dataset(
-        root=data_path, download=False, train=True, transform=trn_transform
+        root=data_path, download=True, train=True, transform=trn_transform
     )
     trainset, devset = torch.utils.data.random_split(
         trainset, [int(len(trainset) * 0.7), int(len(trainset) * 0.3)]
     )
     # validtaion, testing set
     tstset = dataset(
-        root=data_path, download=False, train=False, transform=tst_transform
+        root=data_path, download=True, train=False, transform=tst_transform
     )
 
     trainloader = torch.utils.data.DataLoader(
-        trainset,
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=args.n_cpu,
+        trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_cpu, drop_last=True
     )
     devloader = torch.utils.data.DataLoader(
-        devset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.n_cpu,
+        devset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_cpu, drop_last=True
     )
     tstloader = torch.utils.data.DataLoader(
-        tstset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.n_cpu
+        tstset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_cpu
     )
 
     return trainloader, devloader, tstloader
@@ -179,18 +168,18 @@ def get_center(model, data_loader, num_class, device):
             center += batch_center
     return center/len(data_loader)
 
-def create_center(model, data_loader, device):
+def create_center(model, data_loader, device, m, s):
     print("Initialize class mean vectors")
     sample, _ = next(iter(data_loader))
-    sample = sample.to(device)
     if sample.size(1) == 1:
         sample = sample.repeat(1, 3, 1, 1)
+    sample = sample.to(device)
+    sample = norm(sample, m, s)
     model.eval()
     with torch.no_grad():
         _, features = model(sample)
         rand_rows = torch.randperm(features.size(0))[:10]
         center = features[rand_rows, :]
-        print(rand_rows)
     return center
 
 
@@ -200,42 +189,47 @@ class Loss(nn.Module):
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
         self.zero = torch.zeros(1, dtype=torch.float, device=device)
-        if phase == 'inter':
-            self.center = nn.Parameter(pre_center.clone().detach().to(device))
-            self.thres_inter = torch.tensor(3.6, device=device)
+        if pre_center == None:
+            self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
         else:
-            self.center = pre_center.clone().detach().to(device)
-            self.thres_inter = torch.tensor(11.85, device=device)
+            self.center = nn.Parameter(pre_center.data.detach().to(device))
         self.phase = phase
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
-        print(center_dist_mat)
         threshold = (torch.mean(center_dist_mat)).detach()
         # self.thres_inter = threshold*3
-        self.thres_rest = torch.tensor(1.3, device=device)
-        print(threshold, self.thres_inter, self.thres_rest)
+        # self.thres_inter = torch.tensor(5, device=device)
+        # self.thres_rest = torch.tensor(2, device=device)
+        self.thres_inter = threshold*3
+        self.thres_rest = threshold/2
+
 
     def forward(self, features, labels, train=True):
         if self.phase == 'inter':
-            inter_loss = self.inter_loss(features, labels)
+            # expansion_loss = self.expansion_loss(features, labels)
+            inter_loss = self.inter_loss(features, labels, train)
+            # expansion_loss = self.expansion_loss(features, labels, train)
             return inter_loss, self.center.data
         elif self.phase == 'restricted':
-            restricted_loss = self.restricted_loss(features, labels)
+            restricted_loss = self.expansion_loss(features, labels, train)
             return restricted_loss
         elif self.phase == 'intra':
-            intra_loss = self.intra_loss(features, labels)
-            return intra_loss
+            intra_loss = self.intra_loss(features, labels, train)
+            # inter_loss = self.inter_loss(features, labels)
+            return intra_loss#, inter_loss
 
-    def _get_masked_dist_mat(self, features, labels):
-        center = self.center.clone().detach()
-        dist_mat = torch.cdist(features, center, p=2)
+    def intra_loss(self, features, labels, train):
+        masked_dist_mat = self._get_masked_dist_mat(features, labels, train)
+        loss = (masked_dist_mat).sum() / labels.size(0)
 
-        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
-        return (dist_mat*mask)
+        return loss
 
-    def inter_loss(self, features, labels):
-        center = self.center.data
+    def inter_loss(self, features, labels, train):
+        if train:
+            center = self.center.data
+        else:
+            center = self.center.clone().detach()
         label_counts = torch.zeros((self.num_class, 1), device=labels.device)
         for label_idx in labels:
             label_counts[label_idx] += 1
@@ -248,13 +242,20 @@ class Loss(nn.Module):
         dist_mat = torch.cdist(
             center, center, p=2
         )
-        dist_mat = torch.where(dist_mat < self.thres_inter, self.thres_inter-dist_mat, self.zero)
-        inter_loss = torch.mean(dist_mat)
+        dist_mat = torch.where(
+            dist_mat == 0, dist_mat, self.thres_inter-dist_mat
+        )
+        inter_loss = torch.mean(torch.abs(dist_mat))
+        # inter_loss = torch.abs(torch.mean(dist_mat)-self.thres_inter)
 
         return inter_loss
 
-    def restricted_loss(self, features, labels):
-        masked_dist_mat = self._get_masked_dist_mat(features, labels)
+    def expansion_loss(self, features, labels, train):
+        center = self.center.clone().detach()
+        dist_mat = torch.cdist(features, center, p=2)
+        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
+        # masked_dist_mat = self._get_masked_dist_mat(features, labels, train)
+        masked_dist_mat = dist_mat*mask
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
         dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
@@ -262,8 +263,16 @@ class Loss(nn.Module):
         loss = (dist.sum()/labels.size(0))
         return loss
 
-    def intra_loss(self, features, labels):
-        masked_dist_mat = self._get_masked_dist_mat(features, labels)
-        loss = (masked_dist_mat).sum() / labels.size(0)
+    def _get_masked_dist_mat(self, features, labels, train):
+        if train:
+            center = self.center.data
+        else:
+            center = self.center.clone().detach()
+        center = self.center.clone().detach()
+        dist_mat = torch.cdist(features, center, p=2)
 
-        return loss
+        # center_dist = torch.cdist(center, center, p=2)
+        # print(center_dist)
+        # print(dist_mat)
+        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
+        return (dist_mat*mask)

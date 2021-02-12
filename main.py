@@ -13,19 +13,6 @@ from intra_model_trainer import Trainer as intra_trainer
 
 def main():
     args = config.get_config()
-    if args.device != 'cpu':
-        print("SET torch backend")
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.enabled = False
-
-    # set seed for reproducibility
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    os.environ['PYTHONHASHSEED'] = str(args.seed)
 
     if args.phase == 'ce':
         print("Standard model will be trained")

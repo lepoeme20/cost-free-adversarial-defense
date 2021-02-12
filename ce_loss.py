@@ -3,11 +3,12 @@ import torch
 import torch.nn as nn
 from utils import network_initialization, get_dataloader
 from torch.utils.tensorboard import SummaryWriter
-from utils import get_m_s, norm, get_optim
+from utils import get_m_s, norm, get_optim, set_seed
 from tqdm import tqdm
 
 class Trainer():
     def __init__(self,args):
+        set_seed(args.seed)
         # dataloader
         self.train_loader, self.dev_loader, _ = get_dataloader(args)
         # model initialization
@@ -28,10 +29,8 @@ class Trainer():
         self.writer = SummaryWriter(f'logger/ce_loss/{args.dataset}/v{str(log_num)}')
 
     def training(self, args):
-        model = self.model
-
         # set optimizer & scheduler
-        optimizer, scheduler = get_optim(model, args.lr)
+        optimizer, scheduler = get_optim(self.model, args.lr)
 
         model_path = os.path.join(self.save_path, "ce_model.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
@@ -51,7 +50,7 @@ class Trainer():
             train = tqdm(total=len(self.train_loader), desc="[TRN] Step", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="[DEV] Step", position=3, leave=False)
             for step, (inputs, labels) in enumerate(self.train_loader, 0):
-                model.train()
+                self.model.train()
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
@@ -60,12 +59,12 @@ class Trainer():
                 inputs = norm(inputs, self.m, self.s)
 
                 # Cross entropy loss
-                logit, features = model(inputs)
+                logit, features = self.model(inputs)
                 loss = self.criterion_CE(logit, labels)
 
                 optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), 1.)
+                nn.utils.clip_grad_norm_(self.model.parameters(), 1.)
                 optimizer.step()
 
                 #################### Logging ###################
@@ -90,7 +89,7 @@ class Trainer():
                     )
 
             for idx, (inputs, labels) in enumerate(self.dev_loader, 0):
-                model.eval()
+                self.model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if inputs.size(1) == 1:
@@ -98,7 +97,7 @@ class Trainer():
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
-                    logit, features = model(inputs)
+                    logit, features = self.model(inputs)
 
                     # Cross entropy loss
                     loss = self.criterion_CE(logit, labels)
@@ -137,7 +136,7 @@ class Trainer():
                 best_loss = dev_loss
                 torch.save(
                     {
-                        "model_state_dict": model.module.state_dict(),
+                        "model_state_dict": self.model.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
                         "trained_epoch": epoch,

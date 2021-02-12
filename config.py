@@ -32,7 +32,7 @@ def parser_setting(parser):
         '--padding', type=int, default=4, help='base padding size'
         )
     base_args.add_argument(
-        '--crop-size', type=int, default=32, help='cropped image size'
+        '--img-size', type=int, default=32, help='cropped image size'
         )
     base_args.add_argument(
         '--dataset', type=str, default='cifar100', choices=['mnist', 'fmnist', 'cifar10', 'cifar100'],

@@ -1,4 +1,6 @@
 import os
+import random
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,6 +10,16 @@ from resnet110 import resnet
 from resnet import resnet34, resnet18
 import torch.nn.functional as F
 
+def set_seed(seed):
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    # set seed for reproducibility
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 def network_initialization(args):
     net = resnet34(args.num_class)
@@ -51,13 +63,24 @@ def __get_loader(args, data_name, transformer):
     )
 
     trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_cpu, drop_last=True
+        trainset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.n_cpu,
+        drop_last=True
     )
     devloader = torch.utils.data.DataLoader(
-        devset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_cpu, drop_last=True
+        devset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.n_cpu,
+        drop_last=True
     )
     tstloader = torch.utils.data.DataLoader(
-        tstset, batch_size=args.batch_size, shuffle=False, num_workers=args.n_cpu
+        tstset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.n_cpu
     )
 
     return trainloader, devloader, tstloader
@@ -116,7 +139,8 @@ def __get_transformer(args):
     # with data augmentation
     trn_transformer = transforms.Compose(
         [
-            transforms.RandomResizedCrop(args.crop_size),
+            transforms.Pad(int(args.padding/2)),
+            transforms.RandomResizedCrop(args.img_size),
             transforms.RandomRotation(15),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -125,7 +149,10 @@ def __get_transformer(args):
 
     # transformer for testing (validation)
     dev_transformer = transforms.Compose(
-        [transforms.Resize(args.crop_size), transforms.ToTensor(),]
+        [
+            transforms.Resize(args.img_size),
+            transforms.ToTensor(),
+        ]
     )
 
     return trn_transformer, dev_transformer
@@ -143,9 +170,10 @@ def __get_dataset_name(args):
     return d_name
 
 
-def get_center(model, data_loader, num_class, device):
+def get_center(model, data_loader, num_class, device, m, s):
     print("Compute class mean vectors")
     center = torch.zeros((num_class, 512), device=device)
+    label_count = torch.zeros((num_class, 1), device=device)
     model.eval()
     with torch.no_grad():
         for (imgs, labels) in data_loader:
@@ -154,32 +182,30 @@ def get_center(model, data_loader, num_class, device):
             if imgs.size(1) == 1:
                 imgs = imgs.repeat(1, 3, 1, 1)
 
+            imgs = norm(imgs, m, s)
             _, features = model(imgs)
 
-            label_counts = torch.zeros((num_class, 1), device=labels.device)
-            for label_idx in labels:
-                label_counts[label_idx] += 1
-
+            batch_count = torch.zeros_like(label_count, device=labels.device)
             batch_center = torch.zeros_like(center, device=device)
             for feature, label_idx in zip(features, labels):
                 batch_center[label_idx] += feature
-            batch_center /= label_counts.clamp(min=1)
+                batch_count[label_idx] += 1
+            label_count += batch_count
 
             center += batch_center
-    return center/len(data_loader)
+    return center/label_count
 
-def create_center(model, data_loader, device, m, s):
+def create_center(model, data_loader):
     print("Initialize class mean vectors")
     sample, _ = next(iter(data_loader))
     if sample.size(1) == 1:
         sample = sample.repeat(1, 3, 1, 1)
-    sample = sample.to(device)
-    sample = norm(sample, m, s)
     model.eval()
     with torch.no_grad():
         _, features = model(sample)
         rand_rows = torch.randperm(features.size(0))[:10]
         center = features[rand_rows, :]
+        print(rand_rows)
     return center
 
 
@@ -198,11 +224,12 @@ class Loss(nn.Module):
             self.center, self.center, p=2
         )
         threshold = (torch.mean(center_dist_mat)).detach()
-        # self.thres_inter = threshold*3
-        # self.thres_inter = torch.tensor(5, device=device)
-        # self.thres_rest = torch.tensor(2, device=device)
         self.thres_inter = threshold*3
-        self.thres_rest = threshold/2
+        # self.thres_inter = 3
+        # self.thres_rest = threshold/3
+        self.thres_rest = torch.tensor(3, device=device)
+        print(self.thres_inter)
+        print(self.thres_rest)
 
 
     def forward(self, features, labels, train=True):
@@ -242,20 +269,13 @@ class Loss(nn.Module):
         dist_mat = torch.cdist(
             center, center, p=2
         )
-        dist_mat = torch.where(
-            dist_mat == 0, dist_mat, self.thres_inter-dist_mat
-        )
-        inter_loss = torch.mean(torch.abs(dist_mat))
-        # inter_loss = torch.abs(torch.mean(dist_mat)-self.thres_inter)
+        dist_mat = torch.where(dist_mat < self.thres_inter, self.thres_inter-dist_mat, self.zero)
+        inter_loss = torch.mean(dist_mat)
 
         return inter_loss
 
     def expansion_loss(self, features, labels, train):
-        center = self.center.clone().detach()
-        dist_mat = torch.cdist(features, center, p=2)
-        mask = labels.unsqueeze(1).eq(self.classes).squeeze()
-        # masked_dist_mat = self._get_masked_dist_mat(features, labels, train)
-        masked_dist_mat = dist_mat*mask
+        masked_dist_mat = self._get_masked_dist_mat(features, labels, train)
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
         dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
@@ -273,6 +293,5 @@ class Loss(nn.Module):
 
         # center_dist = torch.cdist(center, center, p=2)
         # print(center_dist)
-        # print(dist_mat)
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
         return (dist_mat*mask)

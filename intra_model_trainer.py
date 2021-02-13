@@ -10,6 +10,8 @@ from utils import (
     norm,
     get_optim,
     Loss,
+    set_seed,
+    get_center
 )
 from attack_methods import pgd, fgsm
 from tqdm import tqdm
@@ -17,6 +19,7 @@ from tqdm import tqdm
 
 class Trainer:
     def __init__(self, args):
+        set_seed(args.seed)
         # dataloader
         self.train_loader, self.dev_loader, _ = get_dataloader(args)
         # model initialization
@@ -30,10 +33,15 @@ class Trainer:
         pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.center = self.checkpoint["center"]
+        # self.center = get_center(
+        #     self.model, self.train_loader, args.num_class, args.device, self.m, self.s
+        # )
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
+        self.criterion = Loss(
+            args.num_class, args.device, pre_center=self.center, phase=args.phase
+        )
 
         # set logger path
         log_num = 0
@@ -47,17 +55,16 @@ class Trainer:
             self.writer = SummaryWriter(f"logger/proposed/intra_loss/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
-        model = self.model
         if args.adv_train:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
 
         # load the model weights
-        model.module.load_state_dict(self.checkpoint["model_state_dict"])
+        self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(
-            model, args.lr
+            self.model, args.lr
         )
         optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
@@ -84,24 +91,25 @@ class Trainer:
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
 
             for step, (inputs, labels) in enumerate(self.train_loader):
-                model.train()
+                self.model.train()
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if inputs.size(1) == 1:
                     inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
-                    attacker = attack_func(model, args)
+                    attacker = attack_func(self.model, args)
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
-                logit, features = model(inputs)
+                logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels, True)
 
-                loss = ce_loss + intra_loss
+                loss = 0.05*ce_loss + 0.95*intra_loss
+                # loss = ce_loss + intra_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -127,7 +135,7 @@ class Trainer:
                     )
 
             for idx, (inputs, labels) in enumerate(self.dev_loader):
-                model.eval()
+                self.model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if inputs.size(1) == 1:
@@ -139,7 +147,7 @@ class Trainer:
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
-                    logit, features = model(inputs)
+                    logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
                     intra_loss = self.criterion(features, labels, False)
                     loss = ce_loss + intra_loss
@@ -170,20 +178,21 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            if epoch > 50 and dev_loss < best_loss:
+            # if epoch > 25 and dev_loss < best_loss:
+            if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
                 best_loss = dev_loss
                 torch.save(
                     {
-                        "model_state_dict": model.module.state_dict(),
+                        "model_state_dict": self.model.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
                         "trained_epoch": epoch
                     },
-                    model_path[:-3] + '_' + str(epoch) + '.pt'
-                    # model_path
+                    # model_path[:-3] + '_' + str(epoch) + '.pt'
+                    model_path
                 )
 
             scheduler.step(dev_loss)

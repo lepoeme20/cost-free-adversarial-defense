@@ -8,13 +8,21 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-from utils import network_initialization, get_dataloader, get_m_s, norm, get_center
+from utils import (
+    network_initialization,
+    get_dataloader,
+    get_m_s,
+    norm,
+    get_center,
+    set_seed
+)
 import config
 from attack_methods import pgd, fgsm, cw, bim
 
 
 class Test:
     def __init__(self, args):
+        set_seed(args.seed)
         # self.args = args
         self.model = network_initialization(args)
         model_path = os.path.join(
@@ -49,7 +57,7 @@ class Test:
 
         # 정상 데이터에 대한 모델 성능 확인
         if args.attack_name.lower() == "clean":
-            # center = get_center(model, train_loader, args.num_class, args.device)
+            # center = get_center(model, train_loader, args.num_class, args.device, m, s)
             # dist = torch.cdist(center, center, p=2)
             # print(dist)
             correct = 0
@@ -64,7 +72,9 @@ class Test:
                 inputs = norm(inputs, m, s)
 
                 with torch.no_grad():
-                    outputs, _ = model(inputs)
+                    outputs, features = model(inputs)
+                    # dist = torch.cdist(features, center, p=2)
+                    # print(dist)
                     _, predicted = torch.max(outputs, 1)
                     correct += predicted.eq(labels).sum().item()
 

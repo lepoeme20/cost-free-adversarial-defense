@@ -10,6 +10,8 @@ from utils import (
     norm,
     get_optim,
     Loss,
+    get_center,
+    set_seed
 )
 from attack_methods import pgd, fgsm
 from tqdm import tqdm
@@ -17,6 +19,7 @@ from tqdm import tqdm
 
 class Trainer:
     def __init__(self, args):
+        set_seed(args.seed)
         # dataloader
         self.train_loader, self.dev_loader, _ = get_dataloader(args)
         # model initialization
@@ -27,13 +30,19 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, 'inter_model.pt')
-        self.checkpoint = torch.load(pretrained_path)
-        self.center = self.checkpoint["center"]
+        # pretrained_path = os.path.join(self.save_path, 'ce_model.pt')
+        # self.checkpoint = torch.load(pretrained_path)
+        # self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
+        # self.center = self.checkpoint["center"]
+        # print(self.center)
+        # self.center = get_center(
+        #     self.model, self.train_loader, args.num_class, args.device, self.m, self.s
+        # )
+        # print(self.center)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
+        # self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
         # set logger path
         log_num = 0
         if args.adv_train:
@@ -46,17 +55,16 @@ class Trainer:
             self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
-        model = self.model
+        # model = self.model
         if args.adv_train:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
 
         # load the model weights
-        model.module.load_state_dict(self.checkpoint["model_state_dict"])
         optimizer, scheduler = get_optim(
-            model, args.lr
+            self.model, args.lr
         )
-        optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
+        # optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
         # base model
         model_name = f"restricted_model.pt"
@@ -80,8 +88,15 @@ class Trainer:
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
 
+            if epoch == args.ce_epoch:
+                center = get_center(
+                    self.model, self.train_loader, args.num_class, args.device, self.m, self.s
+                )
+                criterion = Loss(
+                    args.num_class, args.device, pre_center=center, phase=args.phase
+                )
             for step, (inputs, labels) in enumerate(self.train_loader):
-                model.train()
+                self.model.train()
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
@@ -94,11 +109,14 @@ class Trainer:
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
-                logit, features = model(inputs)
+                logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                restricted_loss = self.criterion(features, labels, True)
-
-                loss = ce_loss + restricted_loss #- inter_loss
+                if epoch >= args.ce_epoch:
+                    restricted_loss = criterion(features, labels, True)
+                    loss = ce_loss + restricted_loss
+                else:
+                    restricted_loss = torch.tensor(0, device=args.device)
+                    loss = ce_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -124,7 +142,7 @@ class Trainer:
                     )
 
             for idx, (inputs, labels) in enumerate(self.dev_loader):
-                model.eval()
+                self.model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if inputs.size(1) == 1:
@@ -136,10 +154,15 @@ class Trainer:
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
-                    logit, features = model(inputs)
+                    logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    restricted_loss  = self.criterion(features, labels, False)
-                    loss = ce_loss + restricted_loss #- inter_loss
+
+                    if epoch >= args.ce_epoch:
+                        restricted_loss = criterion(features, labels, True)
+                        loss = ce_loss + restricted_loss
+                    else:
+                        restricted_loss = torch.tensor(0, device=args.device)
+                        loss = ce_loss
 
                     # Loss
                     _dev_loss += loss
@@ -164,18 +187,18 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            if dev_loss < best_loss:
+            if epoch >= args.ce_epoch and dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
                 best_loss = dev_loss
                 torch.save(
                     {
-                        "model_state_dict": model.module.state_dict(),
+                        "model_state_dict": self.model.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
                         "trained_epoch": epoch,
-                        "center": self.center
+                        "center": center
                     },
                     model_path
                 )

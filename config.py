@@ -66,6 +66,9 @@ def parser_setting(parser):
         help='number of epochs to train (default: auto)'
         )
     trn_args.add_argument(
+        '--ce-epoch', type=int, default=50
+    )
+    trn_args.add_argument(
         '--batch-size', type=int, default=256,
         help='input batch size for training (default: auto)'
         )

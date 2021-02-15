@@ -24,15 +24,15 @@ class Trainer():
 
         # set logger path
         log_num = 0
-        while os.path.exists(f"logger/ce_loss/{args.dataset}/v{str(log_num)}"):
+        while os.path.exists(f"logger/ce_{args.ce_epoch}/{args.dataset}/v{str(log_num)}"):
             log_num += 1
-        self.writer = SummaryWriter(f'logger/ce_loss/{args.dataset}/v{str(log_num)}')
+        self.writer = SummaryWriter(f'logger/ce_{args.ce_epoch}/{args.dataset}/v{str(log_num)}')
 
     def training(self, args):
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(self.model, args.lr)
 
-        model_path = os.path.join(self.save_path, "ce_model.pt")
+        model_path = os.path.join(self.save_path, f"ce_{args.ce_epoch}_model.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
         self.writer.close()
         best_loss = 1000
@@ -42,10 +42,10 @@ class Trainer():
         trn_loss_log = tqdm(total=0, position=2, bar_format='{desc}')
         dev_loss_log = tqdm(total=0, position=4, bar_format='{desc}')
         best_epoch_log = tqdm(total=0, position=5, bar_format='{desc}')
-        outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
+        outer = tqdm(total=args.ce_epoch, desc="Epoch", position=0, leave=False)
 
         # Train target classifier
-        for epoch in range(args.epochs):
+        for epoch in range(args.ce_epoch):
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="[TRN] Step", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="[DEV] Step", position=3, leave=False)
@@ -131,7 +131,7 @@ class Trainer():
 
             if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
-                    f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
+                    f"Best Epoch: {epoch} / {args.ce_epoch} | Best Loss: {dev_loss}"
                 )
                 best_loss = dev_loss
                 torch.save(

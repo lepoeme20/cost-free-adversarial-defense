@@ -106,33 +106,14 @@ def norm(tensor, m, s):
     return output
 
 
-def get_optim(model, lr, inter=None, inter_lr=None, intra=None, intra_lr=None):
+def get_optim(model, lr):
     optimizer = optim.SGD(
         model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-3
     )
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.1, patience=10
     )
-    if inter != None:
-        print("Create inter optimizer")
-        optimizer_inter = optim.SGD(
-            inter.parameters(), lr=inter_lr #, momentum=0.9, weight_decay=1e-3
-        )
-        scheduler_inter = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer_inter, mode='min', factor=0.1, patience=10
-        )
-        return optimizer, scheduler, optimizer_inter, scheduler_inter
-    elif intra != None:
-        print("Create intra optimizer")
-        optimizer_intra = optim.SGD(
-           intra.parameters(), lr=intra_lr#, momentum=0.99, weight_decay=1e-3
-        )
-        scheduler_intra = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer_intra, mode='min', factor=0.1, patience=10
-        )
-        return optimizer, scheduler, optimizer_intra, scheduler_intra
-    else:
-        return optimizer, scheduler
+    return optimizer, scheduler
 
 
 def __get_transformer(args):
@@ -218,7 +199,7 @@ class Loss(nn.Module):
         if pre_center == None:
             self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
         else:
-            self.center = nn.Parameter(pre_center.data.detach().to(device))
+            self.center = pre_center.data.detach().to(device)
         self.phase = phase
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
@@ -284,10 +265,6 @@ class Loss(nn.Module):
         return loss
 
     def _get_masked_dist_mat(self, features, labels, train):
-        if train:
-            center = self.center.data
-        else:
-            center = self.center.clone().detach()
         center = self.center.clone().detach()
         dist_mat = torch.cdist(features, center, p=2)
 

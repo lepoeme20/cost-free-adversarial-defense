@@ -22,7 +22,10 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 def network_initialization(args):
-    net = resnet34(args.num_class)
+    if 'cifar' in args.dataset:
+        net = resnet34(args.num_class)
+    else:
+        net = resnet18()
 
     # Using multi GPUs if you have
     if torch.cuda.device_count() > 0:
@@ -220,24 +223,21 @@ class Loss(nn.Module):
             # expansion_loss = self.expansion_loss(features, labels, train)
             return inter_loss, self.center.data
         elif self.phase == 'restricted':
-            restricted_loss = self.expansion_loss(features, labels, train)
+            restricted_loss = self.expansion_loss(features, labels)
             return restricted_loss
         elif self.phase == 'intra':
-            intra_loss = self.intra_loss(features, labels, train)
+            intra_loss = self.intra_loss(features, labels)
             # inter_loss = self.inter_loss(features, labels)
             return intra_loss#, inter_loss
 
-    def intra_loss(self, features, labels, train):
-        masked_dist_mat = self._get_masked_dist_mat(features, labels, train)
+    def intra_loss(self, features, labels):
+        masked_dist_mat = self._get_masked_dist_mat(features, labels)
         loss = (masked_dist_mat).sum() / labels.size(0)
 
         return loss
 
-    def inter_loss(self, features, labels, train):
-        if train:
-            center = self.center.data
-        else:
-            center = self.center.clone().detach()
+    def inter_loss(self, features, labels):
+        center = self.center.data
         label_counts = torch.zeros((self.num_class, 1), device=labels.device)
         for label_idx in labels:
             label_counts[label_idx] += 1
@@ -255,20 +255,18 @@ class Loss(nn.Module):
 
         return inter_loss
 
-    def expansion_loss(self, features, labels, train):
-        masked_dist_mat = self._get_masked_dist_mat(features, labels, train)
+    def expansion_loss(self, features, labels):
+        masked_dist_mat = self._get_masked_dist_mat(features, labels)
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
         dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
 
-        loss = (dist.sum()/labels.size(0))
+        loss = dist.sum()/dist.size(0)
         return loss
 
-    def _get_masked_dist_mat(self, features, labels, train):
+    def _get_masked_dist_mat(self, features, labels):
         center = self.center.clone().detach()
         dist_mat = torch.cdist(features, center, p=2)
 
-        # center_dist = torch.cdist(center, center, p=2)
-        # print(center_dist)
         mask = labels.unsqueeze(1).eq(self.classes).squeeze()
         return (dist_mat*mask)

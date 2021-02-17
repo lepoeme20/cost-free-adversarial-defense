@@ -30,19 +30,17 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        # pretrained_path = os.path.join(self.save_path, 'ce_model.pt')
-        # self.checkpoint = torch.load(pretrained_path)
-        # self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
-        # self.center = self.checkpoint["center"]
-        # print(self.center)
-        # self.center = get_center(
-        #     self.model, self.train_loader, args.num_class, args.device, self.m, self.s
-        # )
-        # print(self.center)
+        pretrained_path = os.path.join(self.save_path, f'ce_{args.ce_epoch}_model.pt')
+        self.checkpoint = torch.load(pretrained_path)
+        self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
+        self.center = get_center(
+            self.model, self.train_loader, args.num_class, args.device, self.m, self.s
+        )
+        print(self.center)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        # self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
+        self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
         # set logger path
         log_num = 0
         if args.adv_train:
@@ -55,7 +53,6 @@ class Trainer:
             self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
-        # model = self.model
         if args.adv_train:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
@@ -64,7 +61,7 @@ class Trainer:
         optimizer, scheduler = get_optim(
             self.model, args.lr
         )
-        # optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
+        optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
         # base model
         model_name = f"restricted_model.pt"
@@ -88,13 +85,6 @@ class Trainer:
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
 
-            if epoch == args.ce_epoch:
-                center = get_center(
-                    self.model, self.train_loader, args.num_class, args.device, self.m, self.s
-                )
-                criterion = Loss(
-                    args.num_class, args.device, pre_center=center, phase=args.phase
-                )
             for step, (inputs, labels) in enumerate(self.train_loader):
                 self.model.train()
                 current_step += 1
@@ -111,12 +101,8 @@ class Trainer:
 
                 logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                if epoch >= args.ce_epoch:
-                    restricted_loss = criterion(features, labels, True)
-                    loss = ce_loss + restricted_loss
-                else:
-                    restricted_loss = torch.tensor(0, device=args.device)
-                    loss = ce_loss
+                restricted_loss = self.criterion(features, labels)
+                loss = ce_loss + restricted_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -156,13 +142,8 @@ class Trainer:
                 with torch.no_grad():
                     logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-
-                    if epoch >= args.ce_epoch:
-                        restricted_loss = criterion(features, labels, True)
-                        loss = ce_loss + restricted_loss
-                    else:
-                        restricted_loss = torch.tensor(0, device=args.device)
-                        loss = ce_loss
+                    restricted_loss = self.criterion(features, labels)
+                    loss = ce_loss + restricted_loss
 
                     # Loss
                     _dev_loss += loss
@@ -187,7 +168,7 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            if epoch >= args.ce_epoch and dev_loss < best_loss:
+            if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -198,7 +179,7 @@ class Trainer:
                         "optimizer_state_dict": optimizer.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
                         "trained_epoch": epoch,
-                        "center": center
+                        "center": self.center
                     },
                     model_path
                 )

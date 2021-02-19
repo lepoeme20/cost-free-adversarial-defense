@@ -209,11 +209,11 @@ class Loss(nn.Module):
         )
         threshold = (torch.mean(center_dist_mat)).detach()
         self.thres_inter = threshold*3
-        # self.thres_inter = 3
         # self.thres_rest = threshold/3
-        self.thres_rest = torch.tensor(3, device=device)
-        print(self.thres_inter)
-        print(self.thres_rest)
+        # self.thres_rest = torch.tensor(3, device=device)
+        self.thres_rest = torch.full((512, ), 3., device=device)
+        self.thres_intra = torch.full((512, ), 0., device=device)
+        self.mse_loss = nn.MSELoss()
 
 
     def forward(self, features, labels, train=True):
@@ -233,6 +233,8 @@ class Loss(nn.Module):
     def intra_loss(self, features, labels):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
         loss = (masked_dist_mat).sum() / labels.size(0)
+        # dist = torch.sum(masked_dist_mat, 1)
+        # loss = self.mse_loss(self.thres_intra, dist)
 
         return loss
 
@@ -259,6 +261,7 @@ class Loss(nn.Module):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
+        loss = self.mse_loss(self.thres_rest, dist)
         dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
 
         loss = dist.sum()/dist.size(0)

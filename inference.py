@@ -34,7 +34,8 @@ class Test:
     def load_model(self, model, load_path):
         checkpoint = torch.load(load_path)
         model.module.load_state_dict(checkpoint["model_state_dict"])
-        return model
+        # center = checkpoint["center"]
+        return model#, center
 
     def attack(self, target_cls, dataloader):
         attack_module = globals()[args.attack_name.lower()]
@@ -57,9 +58,9 @@ class Test:
 
         # 정상 데이터에 대한 모델 성능 확인
         if args.attack_name.lower() == "clean":
-            # center = get_center(model, train_loader, args.num_class, args.device, m, s)
+            # mean = get_center(model, train_loader, args.num_class, args.device, m, s)
             # dist = torch.cdist(center, center, p=2)
-            # print(dist)
+            # print("Mean", mean)
             correct = 0
             accumulated_num = 0.0
             total_num = len(tst_loader)
@@ -67,7 +68,6 @@ class Test:
             for step, (inputs, labels) in enumerate(tst_loader, 0):
                 model.eval()
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
                 accumulated_num += labels.size(0)
                 inputs = norm(inputs, m, s)
 

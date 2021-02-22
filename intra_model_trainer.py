@@ -31,6 +31,7 @@ class Trainer:
         os.makedirs(self.save_path, exist_ok=True)
 
         pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
+        # pretrained_path = os.path.join(self.save_path, 'ce_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.center = self.checkpoint["center"]
         # self.center = get_center(
@@ -95,8 +96,8 @@ class Trainer:
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if inputs.size(1) == 1:
-                    inputs = inputs.repeat(1, 3, 1, 1)
+                # if inputs.size(1) == 1:
+                #     inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     attacker = attack_func(self.model, args)
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
@@ -106,7 +107,7 @@ class Trainer:
 
                 logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                intra_loss = self.criterion(features, labels, True)
+                intra_loss = self.criterion(features, labels)
 
                 loss = 0.05*ce_loss + 0.95*intra_loss
                 # loss = ce_loss + intra_loss
@@ -138,8 +139,8 @@ class Trainer:
                 self.model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if inputs.size(1) == 1:
-                    inputs = inputs.repeat(1, 3, 1, 1)
+                # if inputs.size(1) == 1:
+                #     inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)
@@ -149,7 +150,7 @@ class Trainer:
                 with torch.no_grad():
                     logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    intra_loss = self.criterion(features, labels, False)
+                    intra_loss = self.criterion(features, labels)
                     loss = ce_loss + intra_loss
 
                     # Loss
@@ -178,8 +179,8 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            # if epoch > 25 and dev_loss < best_loss:
-            if dev_loss < best_loss:
+            if epoch > 15 and dev_loss < best_loss:
+            # if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -189,9 +190,10 @@ class Trainer:
                         "model_state_dict": self.model.module.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
-                        "trained_epoch": epoch
+                        "trained_epoch": epoch,
+                        "center": self.center
                     },
-                    # model_path[:-3] + '_' + str(epoch) + '.pt'
+                    # model_path[:-8] + str(epoch) + '_' + model_path[-8:]
                     model_path
                 )
 

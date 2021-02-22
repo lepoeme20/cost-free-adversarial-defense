@@ -54,8 +54,8 @@ class Trainer():
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if inputs.size(1) == 1:
-                    inputs = inputs.repeat(1, 3, 1, 1)
+                # if inputs.size(1) == 1:
+                #     inputs = inputs.repeat(1, 3, 1, 1)
                 inputs = norm(inputs, self.m, self.s)
 
                 # Cross entropy loss
@@ -92,8 +92,8 @@ class Trainer():
                 self.model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if inputs.size(1) == 1:
-                    inputs = inputs.repeat(1, 3, 1, 1)
+                # if inputs.size(1) == 1:
+                #     inputs = inputs.repeat(1, 3, 1, 1)
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():

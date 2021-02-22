@@ -90,8 +90,8 @@ class Trainer:
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if inputs.size(1) == 1:
-                    inputs = inputs.repeat(1, 3, 1, 1)
+                # if inputs.size(1) == 1:
+                #    inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     attacker = attack_func(model, args)
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
@@ -131,8 +131,8 @@ class Trainer:
                 self.model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if inputs.size(1) == 1:
-                    inputs = inputs.repeat(1, 3, 1, 1)
+                # if inputs.size(1) == 1:
+                #     inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)

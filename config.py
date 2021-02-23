@@ -170,7 +170,12 @@ def get_config():
     # torch.cuda.set_device(args.local_rank)
 
     # input channels
-    args.rgb = 1 if 'mnist' in args.dataset else 3
+    if 'mnist' in args.dataset:
+        args.rgb = 1
+        args.img_size = 28
+    else:
+        args.rgb = 3
+        args.img_size = 32
 
     # number of input classes
     # CelebA: Female/Male

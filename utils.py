@@ -6,8 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 from torchvision import transforms
-from resnet110 import resnet
 from resnet import resnet34, resnet18
+from small_net import smallnet
 import torch.nn.functional as F
 
 def set_seed(seed):
@@ -25,7 +25,7 @@ def network_initialization(args):
     if 'cifar' in args.dataset:
         net = resnet34(args.num_class)
     else:
-        net = resnet18()
+        net = smallnet()
 
     # Using multi GPUs if you have
     if torch.cuda.device_count() > 0:
@@ -91,7 +91,7 @@ def __get_loader(args, data_name, transformer):
 
 def get_m_s(args):
     if args.dataset.lower() == "mnist":
-        m, s = [0.1307, 0.1307, 0.1307], [0.3081, 0.3081, 0.3081]
+        m, s = [0.1307,], [0.3081,]
     elif args.dataset.lower() == "cifar10":
         m, s = [0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]
     elif args.dataset.lower() == "cifar100":
@@ -154,17 +154,17 @@ def __get_dataset_name(args):
     return d_name
 
 
-def get_center(model, data_loader, num_class, device, m, s):
+def get_center(model, data_loader, num_class, device, m, s, feature_dim):
     print("Compute class mean vectors")
-    center = torch.zeros((num_class, 512), device=device)
+    center = torch.zeros((num_class, feature_dim), device=device)
     label_count = torch.zeros((num_class, 1), device=device)
     model.eval()
     with torch.no_grad():
         for (imgs, labels) in data_loader:
             imgs = imgs.to(device)
             labels = labels.to(device)
-            if imgs.size(1) == 1:
-                imgs = imgs.repeat(1, 3, 1, 1)
+            # if imgs.size(1) == 1:
+            #     imgs = imgs.repeat(1, 3, 1, 1)
 
             imgs = norm(imgs, m, s)
             _, features = model(imgs)
@@ -210,9 +210,8 @@ class Loss(nn.Module):
         threshold = (torch.mean(center_dist_mat)).detach()
         self.thres_inter = threshold*3
         # self.thres_rest = threshold/3
-        # self.thres_rest = torch.tensor(3, device=device)
-        self.thres_rest = torch.full((512, ), 3., device=device)
-        self.thres_intra = torch.full((512, ), 0., device=device)
+        self.thres_rest = torch.tensor(7, device=device)
+        # self.thres_rest = torch.full((512, ), 3., device=device)
         self.mse_loss = nn.MSELoss()
 
 
@@ -233,8 +232,6 @@ class Loss(nn.Module):
     def intra_loss(self, features, labels):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
         loss = (masked_dist_mat).sum() / labels.size(0)
-        # dist = torch.sum(masked_dist_mat, 1)
-        # loss = self.mse_loss(self.thres_intra, dist)
 
         return loss
 
@@ -261,7 +258,6 @@ class Loss(nn.Module):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
-        loss = self.mse_loss(self.thres_rest, dist)
         dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
 
         loss = dist.sum()/dist.size(0)

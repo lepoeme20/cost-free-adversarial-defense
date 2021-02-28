@@ -172,10 +172,10 @@ def get_config():
     # input channels
     if 'mnist' in args.dataset:
         args.rgb = 1
-        args.img_size = 28
+        # args.img_size = 28
     else:
         args.rgb = 3
-        args.img_size = 32
+        # args.img_size = 32
 
     # number of input classes
     # CelebA: Female/Male

@@ -210,7 +210,7 @@ class Loss(nn.Module):
         threshold = (torch.mean(center_dist_mat)).detach()
         self.thres_inter = threshold*3
         # self.thres_rest = threshold/3
-        self.thres_rest = torch.tensor(7, device=device)
+        self.thres_rest = torch.tensor(5, device=device)
         # self.thres_rest = torch.full((512, ), 3., device=device)
         self.mse_loss = nn.MSELoss()
 

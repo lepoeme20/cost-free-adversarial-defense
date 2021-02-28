@@ -33,8 +33,9 @@ class Trainer:
         pretrained_path = os.path.join(self.save_path, f'ce_{args.ce_epoch}_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
+        dim = 120 if 'mnist' in args.dataset else 512
         self.center = get_center(
-            self.model, self.train_loader, args.num_class, args.device, self.m, self.s
+            self.model, self.train_loader, args.num_class, args.device, self.m, self.s, dim
         )
         print(self.center)
 

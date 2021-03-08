@@ -179,22 +179,21 @@ def get_center(model, data_loader, num_class, device, m, s, feature_dim):
             center += batch_center
     return center/label_count
 
-def create_center(model, data_loader):
-    print("Initialize class mean vectors")
-    sample, _ = next(iter(data_loader))
-    if sample.size(1) == 1:
-        sample = sample.repeat(1, 3, 1, 1)
+def get_fprime(model, data_loader, center, m, s):
+    print("Compute F'")
     model.eval()
     with torch.no_grad():
-        _, features = model(sample)
-        rand_rows = torch.randperm(features.size(0))[:10]
-        center = features[rand_rows, :]
-        print(rand_rows)
-    return center
+        for i, (imgs, labels) in data_loader:
+            c = center[labels]
+
+            imgs = norm(imgs, m, s)
+            _, features = model(imgs)
+            dist_mat = torch.cdist(features, center, p=2)
+
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, device, phase, pre_center=None):
+    def __init__(self, num_class, device, phase, model, m, s, data_loader, pre_center=None):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
@@ -210,19 +209,38 @@ class Loss(nn.Module):
         threshold = (torch.mean(center_dist_mat)).detach()
         self.thres_inter = threshold*3
         # self.thres_rest = threshold/3
-        self.thres_rest = torch.tensor(5, device=device)
+        self.thres_rest = torch.tensor(8, device=device)
         # self.thres_rest = torch.full((512, ), 3., device=device)
         self.mse_loss = nn.MSELoss()
 
+        if phase == 'restricted'
+            print("Compute F'")
+            model.eval()
+            self.f_prime = {}
+            with torch.no_grad():
+                for i, (imgs, labels) in enumerate(data_loader):
+                    imgs, labels = imgs.to(device), labels.to(device)
+                    c = self.center[labels]
+                    imgs = norm(imgs, m, s)
+                    _, features = model(imgs)
+                    dist_mat = torch.cdist(features, self.center, p=2)
+                    mask = labels.unsqueeze(1).eq(self.classes).squeeze()
+                    dist = torch.sum((dist_mat*mask), 1)
+                    multiplier = (self.thres_rest-dist)/dist
+                    print((features-c).size())
+                    print(multiplier.unsqueeze(1).size())
 
-    def forward(self, features, labels, train=True):
+                    self.f_prime[i] = features+torch.matmul((features-c), multiplier.unsqueeze(1))
+
+    def forward(self, features, labels, batch_idx, train=True):
         if self.phase == 'inter':
             # expansion_loss = self.expansion_loss(features, labels)
             inter_loss = self.inter_loss(features, labels, train)
             # expansion_loss = self.expansion_loss(features, labels, train)
             return inter_loss, self.center.data
         elif self.phase == 'restricted':
-            restricted_loss = self.expansion_loss(features, labels)
+            # restricted_loss = self.expansion_loss(features, labels)
+            restricted_loss = self.mse_loss(features, self.f_prime[batch_idx])
             return restricted_loss
         elif self.phase == 'intra':
             intra_loss = self.intra_loss(features, labels)

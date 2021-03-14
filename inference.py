@@ -34,8 +34,7 @@ class Test:
     def load_model(self, model, load_path):
         checkpoint = torch.load(load_path)
         model.module.load_state_dict(checkpoint["model_state_dict"])
-        # center = checkpoint["center"]
-        return model#, center
+        return model, checkpoint
 
     def attack(self, target_cls, dataloader):
         attack_module = globals()[args.attack_name.lower()]
@@ -50,17 +49,22 @@ class Test:
         )
 
     def testing(self):
-        model = self.load_model(self.model, self.model_path)
+        model, checkpoint = self.load_model(self.model, self.model_path)
 
         args.batch_size = args.test_batch_size
         train_loader, _, tst_loader = get_dataloader(args)
         m, s = get_m_s(args)
 
+        try:
+            center = checkpoint["center"]
+        except:
+            dim = 120 if 'mnist' in args.dataset else 512
+            center = get_center(model, train_loader, args.num_class, args.device, m, s, dim)
+
         # 정상 데이터에 대한 모델 성능 확인
         if args.attack_name.lower() == "clean":
-            # mean = get_center(model, train_loader, args.num_class, args.device, m, s)
-            # dist = torch.cdist(center, center, p=2)
-            # print("Mean", mean)
+            dist = torch.cdist(center, center, p=2)
+            print("Inter", dist)
             correct = 0
             accumulated_num = 0.0
             total_num = len(tst_loader)
@@ -73,8 +77,8 @@ class Test:
 
                 with torch.no_grad():
                     outputs, features = model(inputs)
-                    # dist = torch.cdist(features, center, p=2)
-                    # print(dist)
+                    dist = torch.cdist(features, center, p=2)
+                    print(dist)
                     _, predicted = torch.max(outputs, 1)
                     correct += predicted.eq(labels).sum().item()
 

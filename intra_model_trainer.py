@@ -30,13 +30,14 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
-        # pretrained_path = os.path.join(self.save_path, 'ce_model.pt')
+        # pretrained_path = os.path.join(self.save_path, 'restricted_model_6.pt')
+        pretrained_path = os.path.join(self.save_path, 'intra_model_best.pt')
         self.checkpoint = torch.load(pretrained_path)
-        self.center = self.checkpoint["center"]
-        # self.center = get_center(
-        #     self.model, self.train_loader, args.num_class, args.device, self.m, self.s
-        # )
+        self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
+        dim = 120 if 'minst' in args.dataset else 512
+        self.center = get_center(
+            self.model, self.train_loader, args.num_class, args.device, self.m, self.s, dim
+        )
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
@@ -60,19 +61,16 @@ class Trainer:
             print("Train the model with adversarial examples")
             attack_func = getattr(pgd, "PGD")
 
-        # load the model weights
-        self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
-
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(
-            self.model, args.lr
+            self.model, 0.001 # 0.01
         )
-        optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
         # base model
         model_name = f"intra_model.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
+            print(model_name)
         model_path = os.path.join(self.save_path, model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
@@ -96,8 +94,6 @@ class Trainer:
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                # if inputs.size(1) == 1:
-                #     inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     attacker = attack_func(self.model, args)
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
@@ -109,8 +105,7 @@ class Trainer:
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels)
 
-                loss = 0.05*ce_loss + 0.95*intra_loss
-                # loss = ce_loss + intra_loss
+                loss = 0.00*ce_loss + 10.0*intra_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -139,8 +134,6 @@ class Trainer:
                 self.model.eval()
                 dev_step += 1
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                # if inputs.size(1) == 1:
-                #     inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)
@@ -151,7 +144,7 @@ class Trainer:
                     logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
                     intra_loss = self.criterion(features, labels)
-                    loss = ce_loss + intra_loss
+                    loss = intra_loss
 
                     # Loss
                     _dev_loss += loss
@@ -179,8 +172,8 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            if epoch > 15 and dev_loss < best_loss:
-            # if dev_loss < best_loss:
+            # if epoch > 15 and dev_loss < best_loss:
+            if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )

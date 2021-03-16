@@ -41,7 +41,12 @@ class Trainer:
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion = Loss(args.num_class, args.device, pre_center=self.center, phase=args.phase)
+        self.criterion = Loss(
+            args.num_class,
+            args.device,
+            pre_center=self.center,
+            phase=args.phase,
+        )
         # set logger path
         log_num = 0
         if args.adv_train:
@@ -102,7 +107,7 @@ class Trainer:
 
                 logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                restricted_loss = self.criterion(features, labels)
+                restricted_loss = self.criterion(features, labels, step)
                 loss = ce_loss + restricted_loss
 
                 optimizer.zero_grad()
@@ -143,7 +148,7 @@ class Trainer:
                 with torch.no_grad():
                     logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    restricted_loss = self.criterion(features, labels)
+                    restricted_loss = self.criterion(features, labels, False)
                     loss = ce_loss + restricted_loss
 
                     # Loss

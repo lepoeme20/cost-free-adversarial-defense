@@ -163,8 +163,6 @@ def get_center(model, data_loader, num_class, device, m, s, feature_dim):
         for (imgs, labels) in data_loader:
             imgs = imgs.to(device)
             labels = labels.to(device)
-            # if imgs.size(1) == 1:
-            #     imgs = imgs.repeat(1, 3, 1, 1)
 
             imgs = norm(imgs, m, s)
             _, features = model(imgs)
@@ -179,98 +177,29 @@ def get_center(model, data_loader, num_class, device, m, s, feature_dim):
             center += batch_center
     return center/label_count
 
-def get_fprime(model, data_loader, center, m, s):
-    print("Compute F'")
-    model.eval()
-    with torch.no_grad():
-        for i, (imgs, labels) in data_loader:
-            c = center[labels]
-
-            imgs = norm(imgs, m, s)
-            _, features = model(imgs)
-            dist_mat = torch.cdist(features, center, p=2)
-
-
 
 class Loss(nn.Module):
-    def __init__(self, num_class, device, phase, model, m, s, data_loader, pre_center=None):
+    def __init__(self, num_class, device, phase, pre_center):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
-        self.zero = torch.zeros(1, dtype=torch.float, device=device)
-        if pre_center == None:
-            self.center = nn.Parameter(torch.randn((num_class, 512), device=device))
-        else:
-            self.center = pre_center.data.detach().to(device)
+        self.center = pre_center.data.detach().to(device)
         self.phase = phase
-        center_dist_mat = torch.cdist(
-            self.center, self.center, p=2
-        )
-        threshold = (torch.mean(center_dist_mat)).detach()
-        self.thres_inter = threshold*3
-        # self.thres_rest = threshold/3
-        self.thres_rest = torch.tensor(8, device=device)
-        # self.thres_rest = torch.full((512, ), 3., device=device)
-        self.mse_loss = nn.MSELoss()
+        self.thres_rest = torch.tensor(6, device=device)
 
-        if phase == 'restricted'
-            print("Compute F'")
-            model.eval()
-            self.f_prime = {}
-            with torch.no_grad():
-                for i, (imgs, labels) in enumerate(data_loader):
-                    imgs, labels = imgs.to(device), labels.to(device)
-                    c = self.center[labels]
-                    imgs = norm(imgs, m, s)
-                    _, features = model(imgs)
-                    dist_mat = torch.cdist(features, self.center, p=2)
-                    mask = labels.unsqueeze(1).eq(self.classes).squeeze()
-                    dist = torch.sum((dist_mat*mask), 1)
-                    multiplier = (self.thres_rest-dist)/dist
-                    print((features-c).size())
-                    print(multiplier.unsqueeze(1).size())
-
-                    self.f_prime[i] = features+torch.matmul((features-c), multiplier.unsqueeze(1))
-
-    def forward(self, features, labels, batch_idx, train=True):
-        if self.phase == 'inter':
-            # expansion_loss = self.expansion_loss(features, labels)
-            inter_loss = self.inter_loss(features, labels, train)
-            # expansion_loss = self.expansion_loss(features, labels, train)
-            return inter_loss, self.center.data
-        elif self.phase == 'restricted':
-            # restricted_loss = self.expansion_loss(features, labels)
-            restricted_loss = self.mse_loss(features, self.f_prime[batch_idx])
+    def forward(self, features, labels):
+        if self.phase == 'restricted':
+            restricted_loss = self.expansion_loss(features, labels)
             return restricted_loss
         elif self.phase == 'intra':
             intra_loss = self.intra_loss(features, labels)
-            # inter_loss = self.inter_loss(features, labels)
-            return intra_loss#, inter_loss
+            return intra_loss
 
     def intra_loss(self, features, labels):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
         loss = (masked_dist_mat).sum() / labels.size(0)
 
         return loss
-
-    def inter_loss(self, features, labels):
-        center = self.center.data
-        label_counts = torch.zeros((self.num_class, 1), device=labels.device)
-        for label_idx in labels:
-            label_counts[label_idx] += 1
-
-        # added
-        for feature, label_idx in zip(features, labels):
-            center[label_idx] += feature
-        center /= label_counts.clamp(min=1)
-
-        dist_mat = torch.cdist(
-            center, center, p=2
-        )
-        dist_mat = torch.where(dist_mat < self.thres_inter, self.thres_inter-dist_mat, self.zero)
-        inter_loss = torch.mean(dist_mat)
-
-        return inter_loss
 
     def expansion_loss(self, features, labels):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)

@@ -30,11 +30,11 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        # pretrained_path = os.path.join(self.save_path, 'restricted_model_6.pt')
-        pretrained_path = os.path.join(self.save_path, 'intra_model_best.pt')
+        pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
+        # pretrained_path = os.path.join(self.save_path, 'intra_model_best.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
-        dim = 120 if 'minst' in args.dataset else 512
+        dim = 120 if 'mnist' in args.dataset else 512
         self.center = get_center(
             self.model, self.train_loader, args.num_class, args.device, self.m, self.s, dim
         )
@@ -63,7 +63,7 @@ class Trainer:
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(
-            self.model, 0.001 # 0.01
+            self.model, 0.1 # 0.01
         )
 
         # base model

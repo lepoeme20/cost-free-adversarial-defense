@@ -79,6 +79,9 @@ def parser_setting(parser):
     trn_args.add_argument(
         '--seed', type=int, default=22, help='Seed for reproductibility'
     )
+    trn_args.add_argument(
+        '--restrict-dist', type=float, help='Distance for restricting loss'
+    )
 
     opt_args = parser.add_argument_group('optimizer params')
     opt_args.add_argument(

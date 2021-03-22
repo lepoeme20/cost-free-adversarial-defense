@@ -46,6 +46,7 @@ class Trainer:
             args.device,
             pre_center=self.center,
             phase=args.phase,
+            dist=args.restrict_dist
         )
         # set logger path
         log_num = 0
@@ -107,7 +108,7 @@ class Trainer:
 
                 logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
-                restricted_loss = self.criterion(features, labels, step)
+                restricted_loss = self.criterion(features, labels)
                 loss = ce_loss + restricted_loss
 
                 optimizer.zero_grad()
@@ -148,7 +149,7 @@ class Trainer:
                 with torch.no_grad():
                     logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
-                    restricted_loss = self.criterion(features, labels, False)
+                    restricted_loss = self.criterion(features, labels)
                     loss = ce_loss + restricted_loss
 
                     # Loss

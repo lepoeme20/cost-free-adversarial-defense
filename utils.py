@@ -179,13 +179,13 @@ def get_center(model, data_loader, num_class, device, m, s, feature_dim):
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, device, phase, pre_center):
+    def __init__(self, num_class, device, phase, pre_center, dist):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
         self.center = pre_center.data.detach().to(device)
         self.phase = phase
-        self.thres_rest = torch.tensor(6, device=device)
+        self.thres_rest = torch.tensor(dist, device=device)
 
     def forward(self, features, labels):
         if self.phase == 'restricted':

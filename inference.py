@@ -29,7 +29,10 @@ class Test:
             args.save_path,
             args.dataset,
         )
-        self.model_path = os.path.join(model_path, f"{args.test_model}_model.pt")
+        if not args.adv_train:
+            self.model_path = os.path.join(model_path, f"{args.test_model}_model.pt")
+        else:
+            self.model_path = os.path.join(model_path, f"{args.test_model}_model_adv_train.pt")
 
     def load_model(self, model, load_path):
         checkpoint = torch.load(load_path)
@@ -55,16 +58,16 @@ class Test:
         train_loader, _, tst_loader = get_dataloader(args)
         m, s = get_m_s(args)
 
-        try:
-            center = checkpoint["center"]
-        except:
-            dim = 120 if 'mnist' in args.dataset else 512
-            center = get_center(model, train_loader, args.num_class, args.device, m, s, dim)
+        # try:
+        #     center = checkpoint["center"]
+        # except:
+        #     dim = 120 if 'mnist' in args.dataset else 512
+        #     center = get_center(model, train_loader, args.num_class, args.device, m, s, dim)
 
         # 정상 데이터에 대한 모델 성능 확인
         if args.attack_name.lower() == "clean":
-            dist = torch.cdist(center, center, p=2)
-            print("Inter", dist)
+            # dist = torch.cdist(center, center, p=2)
+            # print("Inter", dist)
             correct = 0
             accumulated_num = 0.0
             total_num = len(tst_loader)
@@ -77,8 +80,8 @@ class Test:
 
                 with torch.no_grad():
                     outputs, features = model(inputs)
-                    dist = torch.cdist(features, center, p=2)
-                    print(dist)
+                    # dist = torch.cdist(features, center, p=2)
+                    # print(dist)
                     _, predicted = torch.max(outputs, 1)
                     correct += predicted.eq(labels).sum().item()
 

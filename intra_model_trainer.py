@@ -11,7 +11,8 @@ from utils import (
     get_optim,
     Loss,
     set_seed,
-    get_center
+    get_center,
+    LargeMarginLoss,
 )
 from attack_methods import pgd, fgsm
 from tqdm import tqdm
@@ -44,6 +45,12 @@ class Trainer:
         self.criterion = Loss(
             args.num_class, args.device, pre_center=self.center, phase=args.phase
         )
+        self.lm = LargeMarginLoss(
+            gamma=10000,
+            alpha_factor=4,
+            top_k=1,
+            dist_norm=2 # np.inf
+        )
 
         # set logger path
         log_num = 0
@@ -52,9 +59,10 @@ class Trainer:
                 log_num += 1
             self.writer = SummaryWriter(f"logger/proposed/intra_loss/{args.dataset}/adv_train/v{str(log_num)}")
         else:
-            while os.path.exists(f"logger/proposed/intra_loss/{args.dataset}/v{str(log_num)}"):
+            # while os.path.exists(f"logger/proposed/intra_loss/{args.dataset}/v{str(log_num)}"):
+            while os.path.exists(f"logger/proposed/margin_loss/{args.dataset}/v{str(log_num)}"):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/intra_loss/{args.dataset}/v{str(log_num)}")
+            self.writer = SummaryWriter(f"logger/proposed/margin_loss/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
         if args.adv_train:
@@ -67,7 +75,7 @@ class Trainer:
         )
 
         # base model
-        model_name = f"intra_model.pt"
+        model_name = f"margin_model.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
             print(model_name)
@@ -100,12 +108,18 @@ class Trainer:
                     inputs = torch.cat((inputs, adv_imgs), 0)
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
+                one_hot = torch.zeros(
+                    (len(labels), args.num_class),
+                    requires_grad=False,
+                    device=labels.device
+                ).scatter_(1, labels.unsqueeze(1), 1.)
 
                 logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels)
+                margin_loss = self.lm(logit, one_hot, features)
 
-                loss = 0.00*ce_loss + 10.0*intra_loss
+                loss = 0.00*ce_loss + 10.0*intra_loss + margin_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -139,12 +153,18 @@ class Trainer:
                     inputs = torch.cat((inputs, adv_imgs), 0)
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
+                one_hot = torch.zeros(
+                    (len(labels), args.num_class),
+                    requires_grad=False,
+                    device=labels.device
+                ).scatter_(1, labels.unsqueeze(1), 1.)
 
                 with torch.no_grad():
                     logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
                     intra_loss = self.criterion(features, labels)
-                    loss = intra_loss
+                    margin_loss = self.lm(logit, one_hot, features)
+                    loss = intra_loss + margin_loss
 
                     # Loss
                     _dev_loss += loss

@@ -31,7 +31,7 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
+        pretrained_path = os.path.join(self.save_path, 'restricted_model_110.pt')
         # pretrained_path = os.path.join(self.save_path, 'intra_model_best.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
@@ -55,12 +55,12 @@ class Trainer:
         # set logger path
         log_num = 0
         if args.adv_train:
-            while os.path.exists(f"logger/proposed/intra_loss/{args.dataset}/adv_train/v{str(log_num)}"):
+            while os.path.exists(f"logger/proposed/intra_loss_110/{args.dataset}/adv_train/v{str(log_num)}"):
                 log_num += 1
             self.writer = SummaryWriter(f"logger/proposed/intra_loss/{args.dataset}/adv_train/v{str(log_num)}")
         else:
             # while os.path.exists(f"logger/proposed/intra_loss/{args.dataset}/v{str(log_num)}"):
-            while os.path.exists(f"logger/proposed/margin_loss/{args.dataset}/v{str(log_num)}"):
+            while os.path.exists(f"logger/proposed/margin_loss_110/{args.dataset}/v{str(log_num)}"):
                 log_num += 1
             self.writer = SummaryWriter(f"logger/proposed/margin_loss/{args.dataset}/v{str(log_num)}")
 
@@ -75,7 +75,8 @@ class Trainer:
         )
 
         # base model
-        model_name = f"margin_model.pt"
+        # model_name = f"margin_model.pt"
+        model_name = "intra_model_110.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
             print(model_name)
@@ -117,9 +118,9 @@ class Trainer:
                 logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels)
-                margin_loss = self.lm(logit, one_hot, features)
+                # margin_loss = self.lm(logit, one_hot, features)
 
-                loss = 0.00*ce_loss + 10.0*intra_loss + margin_loss
+                loss = 0.00*ce_loss + 10.0*intra_loss # + margin_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -163,8 +164,8 @@ class Trainer:
                     logit, features = self.model(inputs)
                     ce_loss = self.criterion_CE(logit, labels)
                     intra_loss = self.criterion(features, labels)
-                    margin_loss = self.lm(logit, one_hot, features)
-                    loss = intra_loss + margin_loss
+                    # margin_loss = self.lm(logit, one_hot, features)
+                    loss = intra_loss # + margin_loss
 
                     # Loss
                     _dev_loss += loss

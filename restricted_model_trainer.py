@@ -30,7 +30,7 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, f'ce_{args.ce_epoch}_model.pt')
+        pretrained_path = os.path.join(self.save_path, f'ce_{args.ce_epoch}_model_110.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
         dim = 120 if 'mnist' in args.dataset else 512
@@ -55,7 +55,7 @@ class Trainer:
                 log_num += 1
             self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/adv_train/v{str(log_num)}")
         else:
-            while os.path.exists(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}"):
+            while os.path.exists(f"logger/proposed/restricted_loss_110/{args.dataset}/v{str(log_num)}"):
                 log_num += 1
             self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}")
 
@@ -71,7 +71,7 @@ class Trainer:
         optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
         # base model
-        model_name = f"restricted_model.pt"
+        model_name = f"restricted_model_110.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)

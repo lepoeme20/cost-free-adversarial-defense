@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 from torchvision import transforms
-from resnet import resnet34, resnet18
+from resnet import resnet34, resnet18, resnet110
 from small_net import smallnet
 import torch.nn.functional as F
 
@@ -23,7 +23,8 @@ def set_seed(seed):
 
 def network_initialization(args):
     if 'cifar' in args.dataset:
-        net = resnet34(args.num_class)
+        # net = resnet34(args.num_class)
+        net = resnet110(args.num_class)
     else:
         net = smallnet()
 

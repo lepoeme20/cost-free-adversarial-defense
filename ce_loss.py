@@ -26,7 +26,7 @@ class Trainer():
         log_num = 0
         while os.path.exists(f"logger/ce_{args.ce_epoch}_110/{args.dataset}/v{str(log_num)}"):
             log_num += 1
-        self.writer = SummaryWriter(f'logger/ce_{args.ce_epoch}/{args.dataset}/v{str(log_num)}')
+        self.writer = SummaryWriter(f'logger/ce_{args.ce_epoch}_110/{args.dataset}/v{str(log_num)}')
 
     def training(self, args):
         # set optimizer & scheduler

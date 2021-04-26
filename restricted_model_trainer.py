@@ -57,7 +57,7 @@ class Trainer:
         else:
             while os.path.exists(f"logger/proposed/restricted_loss_110/{args.dataset}/v{str(log_num)}"):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/v{str(log_num)}")
+            self.writer = SummaryWriter(f"logger/proposed/restricted_loss_110/{args.dataset}/v{str(log_num)}")
 
     def training(self, args):
         if args.adv_train:

@@ -31,11 +31,13 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
-        # pretrained_path = os.path.join(self.save_path, 'restricted_model_110.pt')
+        # pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
+        pretrained_path = os.path.join(self.save_path, 'restricted_model_110.pt')
         # pretrained_path = os.path.join(self.save_path, 'intra_model_best.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
+        for param in self.model.module.fc.parameters():
+            param.requires_grad = False
         dim = 120 if 'mnist' in args.dataset else 512
         self.center = get_center(
             self.model, self.train_loader, args.num_class, args.device, self.m, self.s, dim
@@ -72,9 +74,8 @@ class Trainer:
             attack_func = getattr(pgd, "PGD")
 
         # set optimizer & scheduler
-        lr = 0.01 if args.dataset == 'cifar10' else (0.001 if args.dataset == 'cifar100' else 0.1)
         optimizer, scheduler = get_optim(
-            self.model, lr
+            self.model, 0.001
         )
 
         # base model
@@ -120,9 +121,9 @@ class Trainer:
                 logit, features = self.model(inputs)
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels)
-                margin_loss = self.lm(logit, one_hot, features)
+                # margin_loss = self.lm(logit, one_hot, features)
 
-                loss = 0.00*ce_loss + 10.0*intra_loss + margin_loss
+                loss = 0.00*ce_loss + 10.0*intra_loss # + margin_loss
 
                 optimizer.zero_grad()
                 loss.backward()

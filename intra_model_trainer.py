@@ -32,8 +32,10 @@ class Trainer:
         os.makedirs(self.save_path, exist_ok=True)
 
         # pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
-        pretrained_path = os.path.join(self.save_path, 'restricted_model_110.pt')
-        # pretrained_path = os.path.join(self.save_path, 'intra_model_best.pt')
+        pretrained_path = os.path.join(
+            self.save_path, f'restricted_{args.restrict_dist}_model_{args.model}.pt'
+        )
+        # pretrained_path = os.path.join(self.save_path, 'intra_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
         for param in self.model.module.fc.parameters():
@@ -46,7 +48,7 @@ class Trainer:
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
         self.criterion = Loss(
-            args.num_class, args.device, pre_center=self.center, phase=args.phase
+            args.num_class, args.device, pre_center=self.center, phase=args.phase, dist=args.restrict_dist
         )
         self.lm = LargeMarginLoss(
             gamma=10000,
@@ -58,15 +60,21 @@ class Trainer:
         # set logger path
         log_num = 0
         if args.adv_train:
-            while os.path.exists(f"logger/proposed/intra_loss_110/{args.dataset}/adv_train/v{str(log_num)}"):
+            while os.path.exists(
+                    f"logger/proposed/intra_loss_{args.model}/{args.dataset}/adv_train/v{str(log_num)}"
+            ):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/intra_loss/{args.dataset}/adv_train/v{str(log_num)}")
+            self.writer = SummaryWriter(
+                f"logger/proposed/intra_loss_{args.model}/{args.dataset}/adv_train/v{str(log_num)}"
+            )
         else:
-            while os.path.exists(f"logger/proposed/intra_loss_110/{args.dataset}/v{str(log_num)}"):
-            # while os.path.exists(f"logger/proposed/margin_loss/{args.dataset}/v{str(log_num)}"):
+            while os.path.exists(
+                    f"logger/proposed/intra_loss_{args.model}/{args.dataset}/v{str(log_num)}"
+            ):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/intra_loss_110/{args.dataset}/v{str(log_num)}")
-            # self.writer = SummaryWriter(f"logger/proposed/margin_loss/{args.dataset}/v{str(log_num)}")
+            self.writer = SummaryWriter(
+                f"logger/proposed/intra_loss_{args.model}/{args.dataset}/v{str(log_num)}"
+            )
 
     def training(self, args):
         if args.adv_train:
@@ -75,12 +83,11 @@ class Trainer:
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(
-            self.model, 0.001
+            self.model, args.lr_intra # 0.0001 # 0.001
         )
 
         # base model
-        # model_name = f"margin_model.pt"
-        model_name = "intra_model_110.pt"
+        model_name = f"intra_model_{args.model}.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
             print(model_name)
@@ -195,8 +202,8 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            # if epoch > 15 and dev_loss < best_loss:
-            if dev_loss < best_loss:
+            if epoch > 50 and dev_loss < best_loss:
+            # if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -209,8 +216,9 @@ class Trainer:
                         "trained_epoch": epoch,
                         "center": self.center
                     },
+                    model_path[:-12] + str(epoch) + '_' + model_path[-12:]
                     # model_path[:-8] + str(epoch) + '_' + model_path[-8:]
-                    model_path
+                    # model_path
                 )
 
             scheduler.step(dev_loss)

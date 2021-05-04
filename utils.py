@@ -22,9 +22,13 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 def network_initialization(args):
-    if 'cifar' in args.dataset:
-        # net = resnet34(args.num_class)
-        net = resnet110(args.num_class)
+    if 'mnist' not in args.dataset:
+        if args.model=='34':
+            net = resnet34(args.num_class)
+        elif args.model=='110':
+            net = resnet110(args.num_class)
+        else:
+            net = resnet18(args.num_class)
     else:
         net = smallnet()
 
@@ -187,6 +191,10 @@ class Loss(nn.Module):
         self.center = pre_center.data.detach().to(device)
         self.phase = phase
         self.thres_rest = torch.tensor(dist, device=device)
+        # center_dist_mat = torch.cdist(
+        #      self.center, self.center, p=2
+        #  )
+        # print(center_dist_mat)
 
     def forward(self, features, labels):
         if self.phase == 'restricted':
@@ -198,7 +206,12 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
-        loss = (masked_dist_mat).sum() / labels.size(0)
+        # loss = (masked_dist_mat).sum() / labels.size(0)
+        dist = torch.sum(masked_dist_mat, 1)
+        dist = torch.where(
+            dist < self.thres_rest, dist, torch.zeros(1, dtype=torch.float32, device=features.device)
+        )
+        loss = dist.sum()/dist.size(0)
 
         return loss
 
@@ -206,7 +219,9 @@ class Loss(nn.Module):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
-        dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
+        # print(dist)
+        # dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
+        dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, torch.zeros(1, dtype=torch.float32, device=dist.device))
 
         loss = dist.sum()/dist.size(0)
         return loss

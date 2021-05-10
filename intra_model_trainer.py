@@ -33,7 +33,9 @@ class Trainer:
 
         # pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
         pretrained_path = os.path.join(
-            self.save_path, f'restricted_{args.restrict_dist}_model_{args.model}.pt'
+            self.save_path,
+            # f'restricted_{args.restrict_dist}_model_{args.model}.pt'
+            f'ce_{args.ce_epoch}_restricted_{args.restrict_dist}_model_{args.model}.pt'
         )
         # pretrained_path = os.path.join(self.save_path, 'intra_model.pt')
         self.checkpoint = torch.load(pretrained_path)
@@ -48,7 +50,11 @@ class Trainer:
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
         self.criterion = Loss(
-            args.num_class, args.device, pre_center=self.center, phase=args.phase, dist=args.restrict_dist
+            args.num_class,
+            args.device,
+            pre_center=self.center,
+            phase=args.phase,
+            dist=args.restrict_dist
         )
         self.lm = LargeMarginLoss(
             gamma=10000,
@@ -83,7 +89,7 @@ class Trainer:
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(
-            self.model, args.lr_intra # 0.0001 # 0.001
+            self.model, args.lr_intra, intra=True # 0.0001 # 0.001
         )
 
         # base model
@@ -120,14 +126,16 @@ class Trainer:
                     inputs = torch.cat((inputs, adv_imgs), 0)
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
-                one_hot = torch.zeros(
-                    (len(labels), args.num_class),
-                    device=labels.device
-                ).scatter_(1, labels.unsqueeze(1), 1.)
+                # one_hot = torch.zeros(
+                #     (len(labels), args.num_class),
+                #     device=labels.device
+                # ).scatter_(1, labels.unsqueeze(1), 1.)
 
                 logit, features = self.model(inputs)
+                _, predict = torch.max(logit, 1)
+                correct_idx = predict.eq(labels)
                 ce_loss = self.criterion_CE(logit, labels)
-                intra_loss = self.criterion(features, labels)
+                intra_loss = self.criterion(features, labels, correct_idx)
                 # margin_loss = self.lm(logit, one_hot, features)
 
                 loss = 0.00*ce_loss + 10.0*intra_loss # + margin_loss
@@ -164,15 +172,18 @@ class Trainer:
                     inputs = torch.cat((inputs, adv_imgs), 0)
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
-                one_hot = torch.zeros(
-                    (len(labels), args.num_class),
-                    device=labels.device
-                ).scatter_(1, labels.unsqueeze(1), 1.)
+                # one_hot = torch.zeros(
+                #     (len(labels), args.num_class),
+                #     device=labels.device
+                # ).scatter_(1, labels.unsqueeze(1), 1.)
 
                 with torch.no_grad():
                     logit, features = self.model(inputs)
+                    _, predict = torch.max(logit, 1)
+                    correct_idx = predict.eq(labels)
+
                     ce_loss = self.criterion_CE(logit, labels)
-                    intra_loss = self.criterion(features, labels)
+                    intra_loss = self.criterion(features, labels, correct_idx)
                     # margin_loss = self.lm(logit, one_hot, features)
                     loss = intra_loss # + margin_loss
 
@@ -202,8 +213,8 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            if epoch > 50 and dev_loss < best_loss:
-            # if dev_loss < best_loss:
+            # if epoch > 50 and dev_loss < best_loss:
+            if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -216,9 +227,9 @@ class Trainer:
                         "trained_epoch": epoch,
                         "center": self.center
                     },
-                    model_path[:-12] + str(epoch) + '_' + model_path[-12:]
+                    # model_path[:-12] + str(epoch) + '_' + model_path[-12:]
                     # model_path[:-8] + str(epoch) + '_' + model_path[-8:]
-                    # model_path
+                    model_path
                 )
 
             scheduler.step(dev_loss)

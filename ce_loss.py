@@ -24,15 +24,19 @@ class Trainer():
 
         # set logger path
         log_num = 0
-        while os.path.exists(f"logger/ce_{args.ce_epoch}_110/{args.dataset}/v{str(log_num)}"):
+        while os.path.exists(
+                f"logger/ce_{args.ce_epoch}_{args.model}/{args.dataset}/v{str(log_num)}"
+        ):
             log_num += 1
-        self.writer = SummaryWriter(f'logger/ce_{args.ce_epoch}_110/{args.dataset}/v{str(log_num)}')
+        self.writer = SummaryWriter(
+            f'logger/ce_{args.ce_epoch}_{args.model}/{args.dataset}/v{str(log_num)}'
+        )
 
     def training(self, args):
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(self.model, args.lr)
 
-        model_path = os.path.join(self.save_path, f"ce_{args.ce_epoch}_model_110.pt")
+        model_path = os.path.join(self.save_path, f"ce_{args.ce_epoch}_model_{args.model}.pt")
         self.writer.add_text(tag='argument', text_string=str(args.__dict__))
         self.writer.close()
         best_loss = 1000

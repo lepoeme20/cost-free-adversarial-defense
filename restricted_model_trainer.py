@@ -30,14 +30,17 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        pretrained_path = os.path.join(self.save_path, f'ce_{args.ce_epoch}_model_110.pt')
+        # pretrained_path = os.path.join(self.save_path, f'ce_{args.ce_epoch}_model.pt')
+        pretrained_path = os.path.join(
+            self.save_path, f'ce_{args.ce_epoch}_model_{args.model}.pt'
+        )
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
         dim = 120 if 'mnist' in args.dataset else 512
         self.center = get_center(
             self.model, self.train_loader, args.num_class, args.device, self.m, self.s, dim
         )
-        print(self.center)
+        print(args.restrict_dist)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
@@ -55,9 +58,13 @@ class Trainer:
                 log_num += 1
             self.writer = SummaryWriter(f"logger/proposed/restricted_loss/{args.dataset}/adv_train/v{str(log_num)}")
         else:
-            while os.path.exists(f"logger/proposed/restricted_loss_110/{args.dataset}/v{str(log_num)}"):
+            while os.path.exists(
+                    f"logger/proposed/restricted_loss_{args.model}/{args.dataset}/v{str(log_num)}"
+            ):
                 log_num += 1
-            self.writer = SummaryWriter(f"logger/proposed/restricted_loss_110/{args.dataset}/v{str(log_num)}")
+            self.writer = SummaryWriter(
+                f"logger/proposed/restricted_loss_{args.model}/{args.dataset}/v{str(log_num)}"
+            )
 
     def training(self, args):
         if args.adv_train:
@@ -70,8 +77,8 @@ class Trainer:
         )
         optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
-        # base model
-        model_name = f"restricted_model_110.pt"
+
+        model_name = f"ce_{args.ce_epoch}_restricted_{args.restrict_dist}_model_{args.model}.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)
@@ -97,8 +104,6 @@ class Trainer:
                 current_step += 1
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                # if inputs.size(1) == 1:
-                #    inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     attacker = attack_func(model, args)
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)

@@ -22,7 +22,9 @@ def main():
         print("Inter loss model will be trained")
         trainer = inter_trainer(args)
     elif args.phase == 'restricted':
-        if not os.path.exists(f'{args.save_path}/{args.dataset}/ce_{args.ce_epoch}_model.pt'):
+        if not os.path.exists(
+                f'{args.save_path}/{args.dataset}/ce_{args.ce_epoch}_model_{args.model}.pt'
+        ):
             print("Standard model for Restricted loss model will be trained")
             trainer = ce_trainer(args)
             trainer.training(args)

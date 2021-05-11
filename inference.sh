@@ -6,12 +6,12 @@
 dataset='cifar100' #cifar10 | cifar100
 attack_methods=('Clean' 'FGSM'  'BIM'  'PGD') # 'Clean' 'FGSM' 'BIM' 'PGD'
 epsilon=0.03
-models=('intra_202') # ce | inter | restricted | intra
+models=('intra') # ce | inter | restricted | intra
 backbone='110'
 adv_training='false'
 data_path='/repo/data'
-tst_batch_size=256
-device_ids=(0 1 2 3)
+tst_batch_size=1024
+device_ids=(0 2 3)
 
 # for v in ${version[@]}
     for model in ${models[@]}

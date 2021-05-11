@@ -85,6 +85,12 @@ def parser_setting(parser):
     trn_args.add_argument(
         '--restrict-dist', type=float, help='Distance for restricting loss'
     )
+    trn_args.add_argument(
+        '--resume', action='store_true', default=False, help='if resume or not'
+    )
+    trn_args.add_argument(
+        '--resume-model', type=str, default=None, help='resume model path'
+    )
 
     opt_args = parser.add_argument_group('optimizer params')
     opt_args.add_argument(

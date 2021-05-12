@@ -31,12 +31,15 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        # pretrained_path = os.path.join(self.save_path, 'restricted_model.pt')
-        pretrained_path = os.path.join(
-            self.save_path,
-            # f'restricted_{args.restrict_dist}_model_{args.model}.pt'
-            f'ce_{args.ce_epoch}_restricted_{args.restrict_dist}_model_{args.model}.pt'
-        )
+        if args.resume:
+            pretrained_path = os.path.join(
+                self.save_path, f'{args.resume_model}.pt'
+            )
+        else:
+            pretrained_path = os.path.join(
+                self.save_path,
+                f'restricted_model_{args.model}.pt'
+            )
         # pretrained_path = os.path.join(self.save_path, 'intra_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
@@ -91,6 +94,13 @@ class Trainer:
         optimizer, scheduler = get_optim(
             self.model, args.lr_intra, intra=True # 0.0001 # 0.001
         )
+        if args.resume:
+            optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
+            scheduler.load_state_dict(self.checkpoint["scheduler_state_dict"])
+            trained_epoch = self.checkpoint["trained_epoch"]
+        else:
+            trained_epoch = 0
+        print(f'start epoch: {trained_epoch}')
 
         # base model
         model_name = f"intra_model_{args.model}.pt"
@@ -110,7 +120,7 @@ class Trainer:
         outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
 
         # train target classifier
-        for epoch in range(args.epochs):
+        for epoch in range(trained_epoch, args.epochs):
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
@@ -213,8 +223,8 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            # if epoch > 50 and dev_loss < best_loss:
-            if dev_loss < best_loss:
+            if epoch > 50 and dev_loss < best_loss:
+            # if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -227,9 +237,9 @@ class Trainer:
                         "trained_epoch": epoch,
                         "center": self.center
                     },
-                    # model_path[:-12] + str(epoch) + '_' + model_path[-12:]
+                    model_path[:-12] + str(epoch) + '_' + model_path[-12:]
                     # model_path[:-8] + str(epoch) + '_' + model_path[-8:]
-                    model_path
+                    # model_path
                 )
 
             scheduler.step(dev_loss)

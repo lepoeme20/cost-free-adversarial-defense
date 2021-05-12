@@ -117,6 +117,9 @@ def parser_setting(parser):
     # Deeply Supervised Discriminative Learning for Adversarial Defense (baseline)의
     # setting을 최대한 따를 것
     attack_args.add_argument(
+        '--save-adv', action='store_true', default=False, help='if save adversarial examples'
+    )
+    attack_args.add_argument(
         '--attack-name', type=str, default='FGSM', choices=['Clean', 'FGSM', 'BIM', 'CW', 'PGD']
     )
     attack_args.add_argument(
@@ -184,10 +187,10 @@ def get_config():
     # input channels
     if 'mnist' in args.dataset:
         args.rgb = 1
-        # args.img_size = 28
+        args.img_size = 28
     else:
         args.rgb = 3
-        # args.img_size = 32
+        args.img_size = 32
 
     # number of input classes
     # CelebA: Female/Male

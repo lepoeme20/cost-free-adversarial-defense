@@ -108,6 +108,7 @@ class Trainer:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
             print(model_name)
         model_path = os.path.join(self.save_path, model_name)
+        print(model_path)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
         best_loss = 1000
@@ -223,8 +224,8 @@ class Trainer:
                             tag="[DEV] Features",
                         )
 
-            if epoch > 50 and dev_loss < best_loss:
-            # if dev_loss < best_loss:
+            # if epoch > 50 and dev_loss < best_loss:
+            if dev_loss < best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -237,7 +238,8 @@ class Trainer:
                         "trained_epoch": epoch,
                         "center": self.center
                     },
-                    model_path[:-12] + str(epoch) + '_' + model_path[-12:]
+                    # model_path[:-12] + str(epoch) + '_' + model_path[-12:]
+                    f"{model_path.split('_')[0]}_{str(epoch)}_{'_'.join(model_path.split('_')[1:])}"
                     # model_path[:-8] + str(epoch) + '_' + model_path[-8:]
                     # model_path
                 )

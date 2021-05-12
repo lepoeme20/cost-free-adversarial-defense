@@ -59,16 +59,27 @@ def __get_loader(args, data_name, transformer):
     trn_transform, tst_transform = transformer
     # call dataset
     # normal training set
-    trainset = dataset(
-        root=data_path, download=True, train=True, transform=trn_transform
-    )
-    trainset, devset = torch.utils.data.random_split(
-        trainset, [int(len(trainset) * 0.7), int(len(trainset) * 0.3)]
-    )
-    # validtaion, testing set
-    tstset = dataset(
-        root=data_path, download=True, train=False, transform=tst_transform
-    )
+    if data_name == 'SVHN':
+        trainset = dataset(
+            root=data_path, download=True, split='train', transform=trn_transform
+        )
+        trainset, devset = torch.utils.data.random_split(
+            trainset, [int(len(trainset) * 0.7), int(len(trainset) * 0.3)]
+        )
+        tstset = dataset(
+            root=data_path, download=True, split='test', transform=tst_transform
+        )
+    else:
+        trainset = dataset(
+            root=data_path, download=True, train=True, transform=trn_transform
+        )
+        trainset, devset = torch.utils.data.random_split(
+            trainset, [int(len(trainset) * 0.7), int(len(trainset) * 0.3)]
+        )
+        # validtaion, testing set
+        tstset = dataset(
+            root=data_path, download=True, train=False, transform=tst_transform
+        )
 
     trainloader = torch.utils.data.DataLoader(
         trainset,
@@ -103,6 +114,8 @@ def get_m_s(args):
         m, s = [0.5071, 0.4865, 0.4409], [0.2673, 0.2564, 0.2762]
     elif args.dataset.lower() == "fmnist":
         m, s = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+    elif args.dataset.lower() == "svhn":
+        m, s = [0.4377, 0.4438, 0.4728], [0.1980, 0.2010, 0.1970]
 
     return m, s
 
@@ -161,6 +174,8 @@ def __get_dataset_name(args):
         d_name = "CIFAR10"
     elif args.dataset.lower() == "cifar100":
         d_name = "CIFAR100"
+    elif args.dataset.lower() == "svhn":
+        d_name = "SVHN"
     return d_name
 
 

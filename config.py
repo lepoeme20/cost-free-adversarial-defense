@@ -35,7 +35,7 @@ def parser_setting(parser):
         '--img-size', type=int, default=32, help='cropped image size'
         )
     base_args.add_argument(
-        '--dataset', type=str, default='cifar100', choices=['mnist', 'fmnist', 'cifar10', 'cifar100'],
+        '--dataset', type=str, default='cifar100', choices=['mnist', 'fmnist', 'cifar10', 'cifar100', 'svhn'],
         help='Dataset name'
         )
     base_args.add_argument(

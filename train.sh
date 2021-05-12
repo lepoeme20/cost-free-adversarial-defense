@@ -3,12 +3,12 @@
 # To save adversaria images
 
 # === Set parameters ===
-dataset='cifar10' #cifar10 | cifar100
+dataset='svhn' #cifar10 | cifar100 | svhn
 adv_training='false'
 phase_tuple=('restricted'  'intra') # ce | inter | restricted | intra
 model='110' # renet | 18 | 34 | 110: str
 restrict_dist=6
-gpu_id=(0 2 3) # (0 1 2 3)
+gpu_id=(0 1 2 3) # (0 1 2 3)
 data_path='/repo/data/'
 lr=0.1
 lr_intra=0.001 # CIFAR10: 0.001

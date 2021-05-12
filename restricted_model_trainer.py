@@ -78,7 +78,7 @@ class Trainer:
         optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
 
-        model_name = f"ce_{args.ce_epoch}_restricted_{args.restrict_dist}_model_{args.model}.pt"
+        model_name = f"restricted_model_{args.model}.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
         model_path = os.path.join(self.save_path, model_name)

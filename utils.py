@@ -64,7 +64,7 @@ def __get_loader(args, data_name, transformer):
             root=data_path, download=True, split='train', transform=trn_transform
         )
         trainset, devset = torch.utils.data.random_split(
-            trainset, [int(len(trainset) * 0.7), int(len(trainset) * 0.3)]
+            trainset, [int(len(trainset) * 0.7)+1, int(len(trainset) * 0.3)]
         )
         tstset = dataset(
             root=data_path, download=True, split='test', transform=tst_transform
@@ -214,8 +214,6 @@ class Loss(nn.Module):
             self.center, self.center, p=2
         )
         self.thres_rest = torch.mean(center_dist_mat)/3 * 2
-        print(self.thres_rest)
-        # self.thres_rest = torch.tensor(dist, device=device)
         self.mse = nn.MSELoss(reduction='mean')
 
     def forward(self, features, labels, correct_idx=None):
@@ -230,9 +228,7 @@ class Loss(nn.Module):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
         dist = torch.sum(masked_dist_mat[correct_idx], 1)
 
-        # loss = (masked_dist_mat).sum() / labels.size(0)
         loss = dist.sum()/dist.size(0)
-
         return loss
 
     def expansion_loss(self, features, labels):
@@ -241,9 +237,6 @@ class Loss(nn.Module):
         dist = torch.sum(masked_dist_mat, 1) # row sum
         target = torch.full(dist.size(), self.thres_rest, device=dist.device)
         loss = self.mse(dist, target)
-        # dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
-
-        # loss = dist.sum()/dist.size(0)
         return loss
 
     def _get_masked_dist_mat(self, features, labels):

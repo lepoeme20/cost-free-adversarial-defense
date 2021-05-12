@@ -16,7 +16,7 @@ class PGD(Attack):
         # for adversarial training
         if args.adv_train:
             self.eps = np.random.uniform(0.2, 0.5) if 'mnist' in args.dataset else np.random.uniform(0.02, 0.05)
-        self.alpha = 2/255
+        self.alpha = self.eps/4 # 2/255
         self.n_iters = args.pgd_iters
         self.random_start = args.pgd_random_start
         self.criterion = nn.CrossEntropyLoss()

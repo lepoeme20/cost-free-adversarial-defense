@@ -68,12 +68,13 @@ class Attack(object):
         print('Progress : {:.2f}% / Accuracy : {:.2f}%'.format(
             (step+1)/total_num*100, acc))
 
-        adversarials = torch.cat(adv_list, 0)
-        y = torch.cat(label_list, 0)
+        if args.save_adv:
+            adversarials = torch.cat(adv_list, 0)
+            y = torch.cat(label_list, 0)
 
-        os.makedirs(save_path, exist_ok=True)
-        save_path = os.path.join(save_path, file_name)
-        torch.save((adversarials, y), save_path)
+            os.makedirs(save_path, exist_ok=True)
+            save_path = os.path.join(save_path, file_name)
+            torch.save((adversarials, y), save_path)
 
     def training(self, imgs, labels, m, s):
         adv_imgs, labels = self.__call__(imgs, labels, norm, m, s)

@@ -116,10 +116,6 @@ def norm(tensor, m, s):
 
 def get_optim(model, lr, intra=False):
     if intra:
-        print("Set Adam Optim")
-        # optimizer = optim.Adam(
-        #     model.parameters(), lr=lr
-        # )
         optimizer = optim.SGD(
             model.parameters(), lr=lr
         )
@@ -199,13 +195,13 @@ class Loss(nn.Module):
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
         self.center = pre_center.data.detach().to(device)
         self.phase = phase
-        # center_dist_mat = torch.cdist(
-        #      self.center, self.center, p=2
-        #  )
-        # self.thres_rest = torch.mean(center_dist_mat)/3 * 2
-        # print(self.thres_rest)
-        self.thres_rest = torch.tensor(dist, device=device)
-        # self.mse = nn.MSELoss(reduction='mean')
+        center_dist_mat = torch.cdist(
+            self.center, self.center, p=2
+        )
+        self.thres_rest = torch.mean(center_dist_mat)/3 * 2
+        print(self.thres_rest)
+        # self.thres_rest = torch.tensor(dist, device=device)
+        self.mse = nn.MSELoss(reduction='mean')
 
     def forward(self, features, labels, correct_idx=None):
         if self.phase == 'restricted':
@@ -217,10 +213,10 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels, correct_idx):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
-        # dist = torch.sum(masked_dist_mat[correct_idx], 1)
+        dist = torch.sum(masked_dist_mat[correct_idx], 1)
 
-        loss = (masked_dist_mat).sum() / labels.size(0)
-        # loss = dist.sum()/dist.size(0)
+        # loss = (masked_dist_mat).sum() / labels.size(0)
+        loss = dist.sum()/dist.size(0)
 
         return loss
 
@@ -228,13 +224,11 @@ class Loss(nn.Module):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
 
         dist = torch.sum(masked_dist_mat, 1) # row sum
-        # target = torch.full(dist.size(), self.thres_rest, device=dist.device)
-        # loss = self.mse(dist, target)
-        # print(dist)
-        dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
-        # dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, torch.zeros(1, dtype=torch.float32, device=dist.device))
+        target = torch.full(dist.size(), self.thres_rest, device=dist.device)
+        loss = self.mse(dist, target)
+        # dist = torch.where(dist < self.thres_rest, self.thres_rest-dist, dist-self.thres_rest)
 
-        loss = dist.sum()/dist.size(0)
+        # loss = dist.sum()/dist.size(0)
         return loss
 
     def _get_masked_dist_mat(self, features, labels):

@@ -30,7 +30,9 @@ class Test:
             args.dataset,
         )
         if not args.adv_train:
-            self.model_path = os.path.join(model_path, f"{args.test_model}_model.pt")
+            self.model_path = os.path.join(
+                model_path, f"{args.test_model}_model_{args.model}.pt"
+            )
         else:
             self.model_path = os.path.join(model_path, f"{args.test_model}_model_adv_train.pt")
 

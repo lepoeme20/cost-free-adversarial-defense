@@ -177,20 +177,13 @@ def get_config():
     parser = argparse.ArgumentParser(description="PyTorch Defense by distance-based model")
     default_parser = parser_setting(parser)
     args, _ = default_parser.parse_known_args()
-
-    # args.is_master = args.local_rank == 0
-    # args.device = torch.device("cuda:{}".format(args.local_rank))
     args.device = torch.device(f'cuda:{args.device_ids[0]}' if torch.cuda.is_available else 'cpu')
-    # torch.distributed.init_process_group(backend="nccl")
-    # torch.cuda.set_device(args.local_rank)
 
     # input channels
     if 'mnist' in args.dataset:
         args.rgb = 1
-        args.img_size = 28
     else:
         args.rgb = 3
-        args.img_size = 32
 
     # number of input classes
     # CelebA: Female/Male

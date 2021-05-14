@@ -180,7 +180,6 @@ def __get_dataset_name(args):
 
 
 def get_center(model, data_loader, num_class, device, m, s, feature_dim):
-    print("Compute class mean vectors")
     center = torch.zeros((num_class, feature_dim), device=device)
     label_count = torch.zeros((num_class, 1), device=device)
     model.eval()

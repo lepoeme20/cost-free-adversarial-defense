@@ -57,7 +57,6 @@ class Trainer:
             args.device,
             pre_center=self.center,
             phase=args.phase,
-            dist=args.restrict_dist
         )
         self.lm = LargeMarginLoss(
             gamma=10000,
@@ -92,15 +91,8 @@ class Trainer:
 
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(
-            self.model, args.lr_intra, intra=True # 0.0001 # 0.001
+            self.model, args.lr_intra, intra=True
         )
-        if args.resume:
-            optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
-            scheduler.load_state_dict(self.checkpoint["scheduler_state_dict"])
-            trained_epoch = self.checkpoint["trained_epoch"]
-        else:
-            trained_epoch = 0
-        print(f'start epoch: {trained_epoch}')
 
         # base model
         model_name = f"intra_model_{args.model}.pt"
@@ -108,17 +100,24 @@ class Trainer:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
             print(model_name)
         model_path = os.path.join(self.save_path, model_name)
-        print(model_path)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
         best_loss = 1000
         current_step = 0
         dev_step = 0
 
+        if args.resume:
+            optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
+            scheduler.load_state_dict(self.checkpoint["scheduler_state_dict"])
+            trained_epoch = self.checkpoint["trained_epoch"] + 1
+            best_loss = self.checkpoint["best_loss"]
+        else:
+            trained_epoch = 0
+
         trn_loss_log = tqdm(total=0, position=2, bar_format='{desc}')
         dev_loss_log = tqdm(total=0, position=4, bar_format='{desc}')
         best_epoch_log = tqdm(total=0, position=5, bar_format='{desc}')
-        outer = tqdm(total=args.epochs, desc="Epoch", position=0, leave=False)
+        outer = tqdm(total=args.epochs-trained_epoch, desc="Epoch", position=0, leave=False)
 
         # train target classifier
         for epoch in range(trained_epoch, args.epochs):
@@ -236,6 +235,7 @@ class Trainer:
                         "optimizer_state_dict": optimizer.state_dict(),
                         "scheduler_state_dict": scheduler.state_dict(),
                         "trained_epoch": epoch,
+                        "best_loss": dev_loss,
                         "center": self.center
                     },
                     # model_path[:-12] + str(epoch) + '_' + model_path[-12:]

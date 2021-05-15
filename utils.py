@@ -22,15 +22,14 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 def network_initialization(args):
-    if 'mnist' not in args.dataset:
-        if args.model=='34':
-            net = resnet34(args.num_class)
-        elif args.model=='110':
-            net = resnet110(args.num_class)
-        else:
-            net = resnet18(args.num_class)
+    if args.model=='34':
+        net = resnet34(args.num_class)
+    elif args.model=='110':
+        net = resnet110(args.num_class)
+    elif args.model=='18':
+        net = resnet18(args.num_class)
     else:
-        net = smallnet()
+        net = smallnet(args.model)
 
     # Using multi GPUs if you have
     if torch.cuda.device_count() > 0:
@@ -107,13 +106,13 @@ def __get_loader(args, data_name, transformer):
 
 def get_m_s(args):
     if args.dataset.lower() == "mnist":
-        m, s = [0.1307,], [0.3081,]
+        m, s = [0.1307, 0.1307, 0.1307], [0.3081, 0.3081, 0.3081]
     elif args.dataset.lower() == "cifar10":
         m, s = [0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010]
     elif args.dataset.lower() == "cifar100":
         m, s = [0.5071, 0.4865, 0.4409], [0.2673, 0.2564, 0.2762]
     elif args.dataset.lower() == "fmnist":
-        m, s = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+        m, s = [0.1307, 0.1307, 0.1307], [0.3081, 0.3081, 0.3081]
     elif args.dataset.lower() == "svhn":
         m, s = [0.4377, 0.4438, 0.4728], [0.1980, 0.2010, 0.1970]
 
@@ -136,6 +135,7 @@ def get_optim(model, lr, intra=False):
         optimizer = optim.SGD(
             model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-3
         )
+    # optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.1, patience=10
     )
@@ -144,20 +144,26 @@ def get_optim(model, lr, intra=False):
 
 def __get_transformer(args):
     # with data augmentation
-    trn_transformer = transforms.Compose(
-        [
-            transforms.Pad(int(args.padding/2)),
-            transforms.RandomResizedCrop(args.img_size),
-            transforms.RandomRotation(15),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-        ]
-    )
-
+    if 'mnist' in args.dataset:
+        trn_transformer = transforms.Compose(
+            [
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]
+        )
+    else:
+        trn_transformer = transforms.Compose(
+            [
+                transforms.Pad(int(args.padding/2)),
+                transforms.RandomResizedCrop(args.img_size),
+                transforms.RandomRotation(15),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+            ]
+        )
     # transformer for testing (validation)
     dev_transformer = transforms.Compose(
         [
-            transforms.Resize(args.img_size),
             transforms.ToTensor(),
         ]
     )
@@ -203,7 +209,7 @@ def get_center(model, data_loader, num_class, device, m, s, feature_dim):
 
 
 class Loss(nn.Module):
-    def __init__(self, num_class, device, phase, pre_center, dist=0):
+    def __init__(self, num_class, device, phase, pre_center):
         super(Loss, self).__init__()
         self.num_class = num_class
         self.classes = torch.arange(num_class, dtype=torch.long, device=device)
@@ -225,7 +231,8 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels, correct_idx):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
-        dist = torch.sum(masked_dist_mat[correct_idx], 1)
+        dist = torch.sum(masked_dist_mat, 1)
+        # dist = torch.sum(masked_dist_mat[correct_idx], 1)
 
         loss = dist.sum()/dist.size(0)
         return loss

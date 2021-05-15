@@ -39,7 +39,7 @@ def parser_setting(parser):
         help='Dataset name'
         )
     base_args.add_argument(
-        '--model', type=str, default='34', choices=['lenet', '18', '34', '110']
+        '--model', type=str, default='34', choices=['lenet', 'baseline', '18', '34', '110']
     )
     base_args.add_argument(
         "--data-root-path", type=str, default='/media/lepoeme20/Data/basics', help='data path'
@@ -178,12 +178,6 @@ def get_config():
     default_parser = parser_setting(parser)
     args, _ = default_parser.parse_known_args()
     args.device = torch.device(f'cuda:{args.device_ids[0]}' if torch.cuda.is_available else 'cpu')
-
-    # input channels
-    if 'mnist' in args.dataset:
-        args.rgb = 1
-    else:
-        args.rgb = 3
 
     # number of input classes
     # CelebA: Female/Male

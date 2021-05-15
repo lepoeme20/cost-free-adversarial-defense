@@ -60,22 +60,16 @@ class Test:
         train_loader, _, tst_loader = get_dataloader(args)
         m, s = get_m_s(args)
 
-        # try:
-        #     center = checkpoint["center"]
-        # except:
-        #     dim = 120 if 'mnist' in args.dataset else 512
-        #     center = get_center(model, train_loader, args.num_class, args.device, m, s, dim)
-
         # 정상 데이터에 대한 모델 성능 확인
         if args.attack_name.lower() == "clean":
-            # dist = torch.cdist(center, center, p=2)
-            # print("Inter", dist)
             correct = 0
             accumulated_num = 0.0
             total_num = len(tst_loader)
 
             for step, (inputs, labels) in enumerate(tst_loader, 0):
                 model.eval()
+                if inputs.size(1) == 1:
+                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 accumulated_num += labels.size(0)
                 inputs = norm(inputs, m, s)

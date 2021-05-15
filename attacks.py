@@ -43,8 +43,8 @@ class Attack(object):
 
         for step, (imgs, labels) in enumerate(data_loader):
             imgs = imgs.to(args.device)
-            # if imgs.size(1) == 1:
-            #     imgs = imgs.expand(imgs.size(0), 3, imgs.size(2), imgs.size(3))
+            if imgs.size(1) == 1:
+                imgs = imgs.expand(imgs.size(0), 3, imgs.size(2), imgs.size(3))
             labels = labels.to(args.device)
             adv_imgs, labels = self.__call__(imgs, labels, norm, m, s)
             adv_imgs = norm(adv_imgs, m, s)

@@ -56,6 +56,8 @@ class Trainer():
             for step, (inputs, labels) in enumerate(self.train_loader, 0):
                 self.model.train()
                 current_step += 1
+                if inputs.size(1) == 1:
+                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 inputs = norm(inputs, self.m, self.s)
@@ -93,6 +95,8 @@ class Trainer():
             for idx, (inputs, labels) in enumerate(self.dev_loader, 0):
                 self.model.eval()
                 dev_step += 1
+                if inputs.size(1) == 1:
+                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 inputs = norm(inputs, self.m, self.s)
 

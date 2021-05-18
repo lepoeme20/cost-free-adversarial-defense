@@ -3,8 +3,6 @@
 import argparse
 import multiprocessing
 import torch
-import torch.distributed as dist
-
 
 def str2float(s):
     if '/' in s:
@@ -35,7 +33,8 @@ def parser_setting(parser):
         '--img-size', type=int, default=32, help='cropped image size'
         )
     base_args.add_argument(
-        '--dataset', type=str, default='cifar100', choices=['mnist', 'fmnist', 'cifar10', 'cifar100', 'svhn'],
+        '--dataset', type=str, default='cifar10',
+        choices=['mnist', 'fmnist', 'cifar10', 'cifar100', 'svhn'],
         help='Dataset name'
         )
     base_args.add_argument(
@@ -83,9 +82,6 @@ def parser_setting(parser):
         '--seed', type=int, default=22, help='Seed for reproductibility'
     )
     trn_args.add_argument(
-        '--restrict-dist', type=float, help='Distance for restricting loss'
-    )
-    trn_args.add_argument(
         '--resume', action='store_true', default=False, help='if resume or not'
     )
     trn_args.add_argument(
@@ -120,7 +116,8 @@ def parser_setting(parser):
         '--save-adv', action='store_true', default=False, help='if save adversarial examples'
     )
     attack_args.add_argument(
-        '--attack-name', type=str, default='FGSM', choices=['Clean', 'FGSM', 'BIM', 'CW', 'PGD']
+        '--attack-name', type=str, default='FGSM',
+        choices=['Clean', 'FGSM', 'BIM', 'CW', 'PGD', 'MIM']
     )
     attack_args.add_argument(
         '--test-model', type=str, default='pretrained_model'
@@ -153,14 +150,14 @@ def parser_setting(parser):
         '--cw-lr', type=float, default=0.01, help="learning rate for CW attack"
     )
     attack_args.add_argument(
-        '--cw-binary-search-steps', type=int, default=10, help="# of iteration for CW optimization"
-    )
-    attack_args.add_argument(
         '--cw-targeted', action='store_true', default=False, help="d"
     )
     # arguments for i-FGSM
     attack_args.add_argument(
         '--bim-step', type=int, default=10, help="Iteration for iterative FGSM"
+    )
+    attack_args.add_argument(
+        '--mim-step', type=int, default=10, help="Iteration for iterative FGSM"
     )
 
     ablation_args = parser.add_argument_group('Ablation')

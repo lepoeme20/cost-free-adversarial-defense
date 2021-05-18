@@ -57,7 +57,7 @@ class Trainer():
                 self.model.train()
                 current_step += 1
                 if inputs.size(1) == 1:
-                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
+                    inputs = inputs.repeat(1, 3, 1, 1)
 
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 inputs = norm(inputs, self.m, self.s)
@@ -96,7 +96,7 @@ class Trainer():
                 self.model.eval()
                 dev_step += 1
                 if inputs.size(1) == 1:
-                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 inputs = norm(inputs, self.m, self.s)
 

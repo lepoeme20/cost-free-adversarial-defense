@@ -20,11 +20,14 @@ class CW(Attack):
         self.lr = args.cw_lr
         self.device = args.device
 
-    def forward(self, imgs, labels, norm_fn, m, s):
-        images = imgs.clone().detach()
-        labels = labels.clone().detach()
+    def forward(self, images, labels, norm_fn, m, s):
+        r"""
+        Overridden.
+        """
+        images = images.clone().detach().to(self.device)
 
-        w = self.inverse_tanh_space(images).detach()
+        # w = torch.zeros_like(images).detach() # Requires 2x times
+        w = self.inverse_tanh_space(norm_fn(images, m, s)).detach()
         w.requires_grad = True
 
         best_adv_images = images.clone().detach()
@@ -46,9 +49,9 @@ class CW(Attack):
             L2_loss = current_L2.sum()
 
             outputs, _ = self.target_cls(norm_fn(adv_images, m, s))
-            f_Loss = self.f(outputs, labels).sum()
+            f_loss = self.f(outputs, labels).sum()
 
-            cost = L2_loss + self.c*f_Loss
+            cost = L2_loss + self.c*f_loss
 
             optimizer.zero_grad()
             cost.backward()
@@ -72,41 +75,21 @@ class CW(Attack):
 
         return best_adv_images, labels
 
-    def _f(self, outputs, labels):
-        y_onehot = torch.nn.functional.one_hot(labels)
-
-        real = (y_onehot * outputs).sum(dim=1)
-        other, _ = torch.max((1-y_onehot)*outputs, dim=1)
-
-        if self.targeted:
-            loss = torch.clamp(other-real, min=-self.kappa)
-        else:
-            loss = torch.clamp(real-other, min=-self.kappa)
-
-        return loss
-
-    def arctanh(self, imgs):
-        scaling = torch.clamp(imgs, 0, 1)
-        x = 0.999999 * scaling
-
-        return 0.5*torch.log((1+x)/(1-x))
-
-    def scaler(self, x_atanh):
-        return ((torch.tanh(x_atanh))+1) * 0.5
-
     def tanh_space(self, x):
         return 1/2*(torch.tanh(x) + 1)
 
     def inverse_tanh_space(self, x):
+        # torch.atanh is only for torch >= 1.7.0
         return self.atanh(x*2-1)
 
     def atanh(self, x):
         return 0.5*torch.log((1+x)/(1-x))
 
+    # f-function in the paper
     def f(self, outputs, labels):
         one_hot_labels = torch.eye(len(outputs[0]))[labels].to(self.device)
 
         i, _ = torch.max((1-one_hot_labels)*outputs, dim=1)
         j = torch.masked_select(outputs, one_hot_labels.bool())
 
-        return torch.clamp((j-i), min=-self.kappa)
+        return torch.clamp(1*(i-j), min=-self.kappa)

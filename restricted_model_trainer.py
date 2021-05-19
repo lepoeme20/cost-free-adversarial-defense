@@ -2,7 +2,6 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.distributed as dist
 from utils import network_initialization, get_dataloader
 from torch.utils.tensorboard import SummaryWriter
 from utils import (
@@ -30,17 +29,14 @@ class Trainer:
         self.save_path = os.path.join(args.save_path, args.dataset)
         os.makedirs(self.save_path, exist_ok=True)
 
-        # pretrained_path = os.path.join(self.save_path, f'ce_{args.ce_epoch}_model.pt')
         pretrained_path = os.path.join(
             self.save_path, f'ce_{args.ce_epoch}_model_{args.model}.pt'
         )
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
-        dim = 120 if 'mnist' in args.dataset else 512
         self.center = get_center(
-            self.model, self.train_loader, args.num_class, args.device, self.m, self.s, dim
+            self.model, self.train_loader, args.num_class, args.device, self.m, self.s
         )
-        print(args.restrict_dist)
 
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
@@ -49,7 +45,6 @@ class Trainer:
             args.device,
             pre_center=self.center,
             phase=args.phase,
-            dist=args.restrict_dist
         )
         # set logger path
         log_num = 0
@@ -77,7 +72,6 @@ class Trainer:
         )
         optimizer.load_state_dict(self.checkpoint["optimizer_state_dict"])
 
-
         model_name = f"restricted_model_{args.model}.pt"
         if args.adv_train:
             model_name = f"{model_name.split('.')[0]}_adv_train.pt"
@@ -103,6 +97,8 @@ class Trainer:
                 self.model.train()
                 current_step += 1
 
+                if inputs.size(1) == 1:
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 if args.adv_train:
                     attacker = attack_func(model, args)
@@ -142,9 +138,10 @@ class Trainer:
             for idx, (inputs, labels) in enumerate(self.dev_loader):
                 self.model.eval()
                 dev_step += 1
+
+                if inputs.size(1) == 1:
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                # if inputs.size(1) == 1:
-                #     inputs = inputs.repeat(1, 3, 1, 1)
                 if args.adv_train:
                     adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
                     inputs = torch.cat((inputs, adv_imgs), 0)

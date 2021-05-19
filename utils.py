@@ -185,12 +185,14 @@ def __get_dataset_name(args):
     return d_name
 
 
-def get_center(model, data_loader, num_class, device, m, s, feature_dim):
-    center = torch.zeros((num_class, feature_dim), device=device)
+def get_center(model, data_loader, num_class, device, m, s):
+    center = torch.zeros((num_class, 512), device=device)
     label_count = torch.zeros((num_class, 1), device=device)
     model.eval()
     with torch.no_grad():
         for (imgs, labels) in data_loader:
+            if imgs.size(1) == 1:
+                imgs = imgs.repeat(1, 3, 1, 1)
             imgs = imgs.to(device)
             labels = labels.to(device)
 
@@ -231,8 +233,8 @@ class Loss(nn.Module):
 
     def intra_loss(self, features, labels, correct_idx):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
-        dist = torch.sum(masked_dist_mat, 1)
-        # dist = torch.sum(masked_dist_mat[correct_idx], 1)
+        dist = torch.sum(masked_dist_mat[correct_idx], 1)
+        # dist = torch.sum(masked_dist_mat, 1)
 
         loss = dist.sum()/dist.size(0)
         return loss
@@ -346,3 +348,41 @@ class LargeMarginLoss:
             loss = torch.cat([loss, loss_layer])
         return loss.mean()
 
+
+class Logger(object):
+    """
+    Write console output to external text file.
+
+    Code imported from https://github.com/Cysu/open-reid/blob/master/reid/utils/logging.py.
+    """
+    def __init__(self, fpath=None):
+        self.console = sys.stdout
+        self.file = None
+        if fpath is not None:
+            mkdir_if_missing(os.path.dirname(fpath))
+            self.file = open(fpath, 'w')
+
+    def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, *args):
+        self.close()
+
+    def write(self, msg):
+        self.console.write(msg)
+        if self.file is not None:
+            self.file.write(msg)
+
+    def flush(self):
+        self.console.flush()
+        if self.file is not None:
+            self.file.flush()
+            os.fsync(self.file.fileno())
+
+    def close(self):
+        self.console.close()
+        if self.file is not None:
+            self.file.close()

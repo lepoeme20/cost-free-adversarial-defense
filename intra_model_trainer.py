@@ -14,7 +14,6 @@ from utils import (
     get_center,
     LargeMarginLoss,
 )
-from attack_methods import pgd, fgsm
 from tqdm import tqdm
 
 
@@ -40,14 +39,12 @@ class Trainer:
                 self.save_path,
                 f'restricted_model_{args.model}.pt'
             )
-        # pretrained_path = os.path.join(self.save_path, 'intra_model.pt')
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
         for param in self.model.module.fc.parameters():
             param.requires_grad = False
-        dim = 120 if 'mnist' in args.dataset else 512
         self.center = get_center(
-            self.model, self.train_loader, args.num_class, args.device, self.m, self.s, dim
+            self.model, self.train_loader, args.num_class, args.device, self.m, self.s
         )
 
         # set criterion
@@ -58,37 +55,18 @@ class Trainer:
             pre_center=self.center,
             phase=args.phase,
         )
-        self.lm = LargeMarginLoss(
-            gamma=10000,
-            alpha_factor=4,
-            top_k=1,
-            dist_norm=2 # np.inf
-        )
 
         # set logger path
         log_num = 0
-        if args.adv_train:
-            while os.path.exists(
-                    f"logger/proposed/intra_loss_{args.model}/{args.dataset}/adv_train/v{str(log_num)}"
-            ):
-                log_num += 1
-            self.writer = SummaryWriter(
-                f"logger/proposed/intra_loss_{args.model}/{args.dataset}/adv_train/v{str(log_num)}"
-            )
-        else:
-            while os.path.exists(
-                    f"logger/proposed/intra_loss_{args.model}/{args.dataset}/v{str(log_num)}"
-            ):
-                log_num += 1
-            self.writer = SummaryWriter(
+        while os.path.exists(
                 f"logger/proposed/intra_loss_{args.model}/{args.dataset}/v{str(log_num)}"
-            )
+        ):
+            log_num += 1
+        self.writer = SummaryWriter(
+            f"logger/proposed/intra_loss_{args.model}/{args.dataset}/v{str(log_num)}"
+        )
 
     def training(self, args):
-        if args.adv_train:
-            print("Train the model with adversarial examples")
-            attack_func = getattr(pgd, "PGD")
-
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(
             self.model, args.lr_intra, intra=True
@@ -96,10 +74,8 @@ class Trainer:
 
         # base model
         model_name = f"intra_model_{args.model}.pt"
-        if args.adv_train:
-            model_name = f"{model_name.split('.')[0]}_adv_train.pt"
-            print(model_name)
-        model_path = os.path.join(self.save_path, model_name)
+        # model_path = os.path.join(self.save_path, model_name)
+        model_path = os.path.join(self.save_path, 'ablation', model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
         best_loss = 1000
@@ -136,19 +112,14 @@ class Trainer:
                     inputs = torch.cat((inputs, adv_imgs), 0)
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
-                # one_hot = torch.zeros(
-                #     (len(labels), args.num_class),
-                #     device=labels.device
-                # ).scatter_(1, labels.unsqueeze(1), 1.)
 
                 logit, features = self.model(inputs)
                 _, predict = torch.max(logit, 1)
                 correct_idx = predict.eq(labels)
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels, correct_idx)
-                # margin_loss = self.lm(logit, one_hot, features)
 
-                loss = 0.00*ce_loss + 10.0*intra_loss # + margin_loss
+                loss = 0.00*ce_loss + 10.0*intra_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -182,10 +153,6 @@ class Trainer:
                     inputs = torch.cat((inputs, adv_imgs), 0)
                     labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
-                # one_hot = torch.zeros(
-                #     (len(labels), args.num_class),
-                #     device=labels.device
-                # ).scatter_(1, labels.unsqueeze(1), 1.)
 
                 with torch.no_grad():
                     logit, features = self.model(inputs)
@@ -194,8 +161,7 @@ class Trainer:
 
                     ce_loss = self.criterion_CE(logit, labels)
                     intra_loss = self.criterion(features, labels, correct_idx)
-                    # margin_loss = self.lm(logit, one_hot, features)
-                    loss = intra_loss # + margin_loss
+                    loss = intra_loss
 
                     # Loss
                     _dev_loss += loss
@@ -224,7 +190,8 @@ class Trainer:
                         )
 
             # if epoch > 50 and dev_loss < best_loss:
-            if dev_loss < best_loss:
+            # if dev_loss < best_loss:
+            if dev_loss < 5000:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )

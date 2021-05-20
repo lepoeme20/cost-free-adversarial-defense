@@ -7,7 +7,6 @@ import random
 import config
 import numpy as np
 from ce_loss import Trainer as ce_trainer
-from inter_model_trainer import Trainer as inter_trainer
 from restricted_model_trainer import Trainer as restricted_trainer
 from intra_model_trainer import Trainer as intra_trainer
 
@@ -18,9 +17,6 @@ def main():
         print("Standard model will be trained")
         trainer = ce_trainer(args)
         trainer.training(args)
-    elif args.phase == 'inter':
-        print("Inter loss model will be trained")
-        trainer = inter_trainer(args)
     elif args.phase == 'restricted':
         if not os.path.exists(
                 f'{args.save_path}/{args.dataset}/ce_{args.ce_epoch}_model_{args.model}.pt'

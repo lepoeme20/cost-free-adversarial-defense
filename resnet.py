@@ -147,7 +147,7 @@ def resnet34(num_classes):
     """
     return ResNet(BasicBlock, [3, 4, 6, 3], num_classes)
 
-def resnet18():
+def resnet18(num_classes):
     """ return a ResNet 18 object
     """
-    return ResNet(BasicBlock, [2, 2, 2, 2], 10)
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes)

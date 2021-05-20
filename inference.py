@@ -17,7 +17,7 @@ from utils import (
     set_seed
 )
 import config
-from attack_methods import pgd, fgsm, cw, bim
+from attack_methods import pgd, fgsm, cw, bim, mim
 
 
 class Test:
@@ -28,6 +28,7 @@ class Test:
         model_path = os.path.join(
             args.save_path,
             args.dataset,
+            # 'ablation'
         )
         if not args.adv_train:
             self.model_path = os.path.join(
@@ -69,15 +70,13 @@ class Test:
             for step, (inputs, labels) in enumerate(tst_loader, 0):
                 model.eval()
                 if inputs.size(1) == 1:
-                    inputs = inputs.expand(inputs.size(0), 3, inputs.size(2), inputs.size(3))
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
                 accumulated_num += labels.size(0)
                 inputs = norm(inputs, m, s)
 
                 with torch.no_grad():
                     outputs, features = model(inputs)
-                    # dist = torch.cdist(features, center, p=2)
-                    # print(dist)
                     _, predicted = torch.max(outputs, 1)
                     correct += predicted.eq(labels).sum().item()
 

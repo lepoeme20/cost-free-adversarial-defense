@@ -74,8 +74,8 @@ class Trainer:
 
         # base model
         model_name = f"intra_model_{args.model}.pt"
-        # model_path = os.path.join(self.save_path, model_name)
-        model_path = os.path.join(self.save_path, 'ablation', model_name)
+        model_path = os.path.join(self.save_path, model_name)
+        # model_path = os.path.join(self.save_path, 'ablation', model_name)
 
         self.writer.add_text(tag="argument", text_string=str(args.__dict__))
         best_loss = 1000
@@ -105,12 +105,9 @@ class Trainer:
                 self.model.train()
                 current_step += 1
 
+                if inputs.size(1) == 1:
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if args.adv_train:
-                    attacker = attack_func(self.model, args)
-                    adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
-                    inputs = torch.cat((inputs, adv_imgs), 0)
-                    labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
                 logit, features = self.model(inputs)
@@ -147,11 +144,10 @@ class Trainer:
             for idx, (inputs, labels) in enumerate(self.dev_loader):
                 self.model.eval()
                 dev_step += 1
+
+                if inputs.size(1) == 1:
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if args.adv_train:
-                    adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
-                    inputs = torch.cat((inputs, adv_imgs), 0)
-                    labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
@@ -190,8 +186,8 @@ class Trainer:
                         )
 
             # if epoch > 50 and dev_loss < best_loss:
-            # if dev_loss < best_loss:
-            if dev_loss < 5000:
+            if dev_loss < best_loss:
+            # if dev_loss < 5000:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )

@@ -38,7 +38,7 @@ def parser_setting(parser):
         help='Dataset name'
         )
     base_args.add_argument(
-        '--model', type=str, default='34', choices=['lenet', 'baseline', '18', '34', '110']
+        '--model', type=str, default='34', choices=['vgg', 'baseline', '18', '34', '110']
     )
     base_args.add_argument(
         "--data-root-path", type=str, default='/media/lepoeme20/Data/basics', help='data path'
@@ -162,10 +162,10 @@ def parser_setting(parser):
 
     ablation_args = parser.add_argument_group('Ablation')
     ablation_args.add_argument(
-        '--lambda-intra', type=float, default=1., help="Intra loss weight"
+        '--black-box', action='store_true', default=False, help="d"
     )
     ablation_args.add_argument(
-        '--lambda-inter', type=float, default=1., help="Inter loss weight"
+        '--adaptive', action='store_true', default=False, help="d"
     )
 
     return parser

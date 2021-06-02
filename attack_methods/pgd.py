@@ -4,10 +4,14 @@ in the paper 'Towards Deep Learning Models Resistant to Adversarial Attacks'
 
 This code is written by Seugnwan Seo
 """
+import os
+import sys
 import torch
 import torch.nn as nn
 import numpy as np
 from attacks import Attack
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from utils import Loss, get_center, get_m_s
 
 class PGD(Attack):
     def __init__(self, target_cls, args, train_loader, blackbox_cls=None):

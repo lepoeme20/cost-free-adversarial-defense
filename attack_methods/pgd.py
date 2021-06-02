@@ -10,17 +10,26 @@ import numpy as np
 from attacks import Attack
 
 class PGD(Attack):
-    def __init__(self, target_cls, args):
-        super(PGD, self).__init__("PGD", target_cls)
+    def __init__(self, target_cls, args, train_loader, blackbox_cls=None):
+        super(PGD, self).__init__("PGD", target_cls, blackbox_cls)
         self.eps = args.eps
-        # for adversarial training
-        if args.adv_train:
-            self.eps = np.random.uniform(0.2, 0.5) if 'mnist' in args.dataset else np.random.uniform(0.02, 0.05)
         self.alpha = self.eps/4
         self.n_iters = args.pgd_iters
         self.random_start = args.pgd_random_start
-        self.criterion = nn.CrossEntropyLoss()
-        self.device = args.device
+        self.criterion_CE = nn.CrossEntropyLoss()
+        self.blackbox_cls = blackbox_cls
+        self.adaptive = args.adaptive
+        if self.adaptive:
+            m, s = get_m_s(args)
+            center = get_center(
+                target_cls, train_loader, args.num_class, args.device, m, s
+            )
+            self.criterion = Loss(
+                args.num_class,
+                args.device,
+                pre_center=center,
+                phase='intra',
+            )
 
     def forward(self, imgs, labels, norm_fn, m, s):
         adv_imgs = imgs.clone().detach()
@@ -31,8 +40,17 @@ class PGD(Attack):
             adv_imgs = torch.clamp(adv_imgs, 0, 1)
 
         for _ in range(self.n_iters):
-            outputs, _ = self.target_cls(norm_fn(adv_imgs, m, s))
-            loss = self.criterion(outputs, labels)
+            if self.blackbox_cls is not None:
+                outputs, features = self.blackbox_cls(norm_fn(adv_imgs, m, s))
+            else:
+                outputs, features = self.target_cls(norm_fn(adv_imgs, m, s))
+
+            if self.adaptive:
+                ce_loss = self.criterion_CE(outputs, labels)
+                intra_loss = self.criterion(features, labels)
+                loss = ce_loss + intra_loss
+            else:
+                loss = self.criterion_CE(outputs, labels)
 
             grad = torch.autograd.grad(loss, adv_imgs)[0]
 

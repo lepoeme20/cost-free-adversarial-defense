@@ -23,40 +23,41 @@ from attack_methods import pgd, fgsm, cw, bim, mim
 class Test:
     def __init__(self, args):
         set_seed(args.seed)
-        # self.args = args
-        self.model = network_initialization(args)
+        if args.black_box:
+            self.model, self.blackbox = network_initialization(args)
+            model_path = os.path.join(
+                args.save_path,
+                args.dataset,
+                # "intra_model_vgg.pt"
+                "ce_200_model_vgg.pt"
+            )
+            self.blackbox.module.load_state_dict(torch.load(model_path)["model_state_dict"])
+        else:
+            self.model = network_initialization(args)
+
         model_path = os.path.join(
             args.save_path,
             args.dataset,
-            # 'ablation'
-        )
-        if not args.adv_train:
-            self.model_path = os.path.join(
-                model_path, f"{args.test_model}_model_{args.model}.pt"
+            f"{args.test_model}_model_{args.model}.pt"
             )
-        else:
-            self.model_path = os.path.join(model_path, f"{args.test_model}_model_adv_train.pt")
+        self.model.module.load_state_dict(torch.load(model_path)["model_state_dict"])
 
-    def load_model(self, model, load_path):
-        checkpoint = torch.load(load_path)
-        model.module.load_state_dict(checkpoint["model_state_dict"])
-        return model, checkpoint
-
-    def attack(self, target_cls, dataloader):
+    def attack(self, tstloader, trnloader, black_box=None):
         attack_module = globals()[args.attack_name.lower()]
         attack_func = getattr(attack_module, args.attack_name)
-        attacker = attack_func(target_cls, args)
+        if args.black_box:
+            attacker = attack_func(self.model, args, trnloader, self.blackbox)
+        else:
+            attacker = attack_func(self.model, args, trnloader)
         save_path = os.path.join("Adv_examples", args.dataset.lower())
         attacker.inference(
             args,
-            data_loader=dataloader,
+            data_loader=tstloader,
             save_path=save_path,
             file_name=args.attack_name + ".pt",
         )
 
     def testing(self):
-        model, checkpoint = self.load_model(self.model, self.model_path)
-
         args.batch_size = args.test_batch_size
         train_loader, _, tst_loader = get_dataloader(args)
         m, s = get_m_s(args)
@@ -96,7 +97,7 @@ class Test:
             )
         # attack시 방어 성능 확인
         else:
-            self.attack(model, tst_loader)
+            self.attack(tst_loader, train_loader)
 
 
 if __name__ == "__main__":

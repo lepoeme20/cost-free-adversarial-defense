@@ -6,8 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 from torchvision import transforms
+from vgg import vgg19
 from resnet import resnet34, resnet18, resnet110
-from small_net import smallnet
 import torch.nn.functional as F
 
 def set_seed(seed):
@@ -22,23 +22,30 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 def network_initialization(args):
-    if args.model=='34':
-        net = resnet34(args.num_class)
-    elif args.model=='110':
-        net = resnet110(args.num_class)
-    elif args.model=='18':
-        net = resnet18(args.num_class)
+    if args.black_box:
+        resnet, vgg = resnet110(args.num_class), vgg19(args.num_class)
+        if torch.cuda.device_count():
+            resnet = nn.DataParallel(resnet, device_ids=args.device_ids)
+            vgg = nn.DataParallel(vgg, device_ids=args.device_ids)
+
+        resnet.to(args.device)
+        vgg.to(args.device)
+
+        return(resnet, vgg)
     else:
-        net = smallnet(args.model)
+        if args.model=='110':
+            net = resnet110(args.num_class)
+        elif args.model=='vgg':
+            net = vgg19(args.num_class)
 
-    # Using multi GPUs if you have
-    if torch.cuda.device_count() > 0:
-        net = nn.DataParallel(net, device_ids=args.device_ids)
+        # Using multi GPUs if you have
+        if torch.cuda.device_count():
+            net = nn.DataParallel(net, device_ids=args.device_ids)
 
-    # change device to set device (CPU or GPU)
-    net.to(args.device)
+        # change device to set device (CPU or GPU)
+        net.to(args.device)
 
-    return net
+        return net
 
 
 def get_dataloader(args):
@@ -231,10 +238,12 @@ class Loss(nn.Module):
             intra_loss = self.intra_loss(features, labels, correct_idx)
             return intra_loss
 
-    def intra_loss(self, features, labels, correct_idx):
+    def intra_loss(self, features, labels, correct_idx=None):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
-        dist = torch.sum(masked_dist_mat[correct_idx], 1)
-        # dist = torch.sum(masked_dist_mat, 1)
+        if correct_idx is not None:
+            dist = torch.sum(masked_dist_mat[correct_idx], 1)
+        else:
+            dist = torch.sum(masked_dist_mat, 1)
 
         loss = dist.sum()/dist.size(0)
         return loss

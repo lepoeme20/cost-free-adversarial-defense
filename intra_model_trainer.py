@@ -41,8 +41,12 @@ class Trainer:
             )
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
-        for param in self.model.module.fc.parameters():
-            param.requires_grad = False
+        try:
+            for param in self.model.module.fc.parameters():
+                param.requires_grad = False
+        except:
+            for param in self.model.module.classifier.parameters():
+                param.requires_grad = False
         self.center = get_center(
             self.model, self.train_loader, args.num_class, args.device, self.m, self.s
         )
@@ -202,9 +206,9 @@ class Trainer:
                         "center": self.center
                     },
                     # model_path[:-12] + str(epoch) + '_' + model_path[-12:]
-                    f"{model_path.split('_')[0]}_{str(epoch)}_{'_'.join(model_path.split('_')[1:])}"
+                    # f"{model_path.split('_')[0]}_{str(epoch)}_{'_'.join(model_path.split('_')[1:])}"
                     # model_path[:-8] + str(epoch) + '_' + model_path[-8:]
-                    # model_path
+                    model_path
                 )
 
             scheduler.step(dev_loss)

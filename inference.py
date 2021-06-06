@@ -32,15 +32,17 @@ class Test:
                 "ce_200_model_vgg.pt"
             )
             self.blackbox.module.load_state_dict(torch.load(model_path)["model_state_dict"])
+            self.blackbox.eval()
         else:
             self.model = network_initialization(args)
 
         model_path = os.path.join(
             args.save_path,
             args.dataset,
-            f"{args.test_model}_model_{args.model}.pt"
+            f"{args.test_model}_model_scale_{args.model}.pt"
             )
         self.model.module.load_state_dict(torch.load(model_path)["model_state_dict"])
+        self.model.eval()
 
     def attack(self, tstloader, trnloader, black_box=None):
         attack_module = globals()[args.attack_name.lower()]
@@ -69,7 +71,6 @@ class Test:
             total_num = len(tst_loader)
 
             for step, (inputs, labels) in enumerate(tst_loader, 0):
-                model.eval()
                 if inputs.size(1) == 1:
                     inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
@@ -77,7 +78,7 @@ class Test:
                 inputs = norm(inputs, m, s)
 
                 with torch.no_grad():
-                    outputs, features = model(inputs)
+                    outputs, features = self.model(inputs)
                     _, predicted = torch.max(outputs, 1)
                     correct += predicted.eq(labels).sum().item()
 

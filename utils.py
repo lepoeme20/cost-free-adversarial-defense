@@ -142,7 +142,6 @@ def get_optim(model, lr, intra=False):
         optimizer = optim.SGD(
             model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-3
         )
-    # optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.1, patience=10
     )
@@ -227,7 +226,8 @@ class Loss(nn.Module):
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
-        self.thres_rest = torch.mean(center_dist_mat)/3 * 2
+        scale = 2 if num_class ==10 else 3/4*3
+        self.thres_rest = torch.mean(center_dist_mat)/3 * scale
         self.mse = nn.MSELoss(reduction='mean')
 
     def forward(self, features, labels, correct_idx=None):

@@ -10,11 +10,9 @@ class Attack(object):
     Arguments:
         object {[type]} -- [description]
     """
-    def __init__(self, attack_type, target_cls, blackbox_cls=None, img_type='float'):
+    def __init__(self, attack_type, target_cls, img_type='float'):
         self.attack_name = attack_type
         self.target_cls = target_cls.eval()
-        if blackbox_cls is not None:
-            self.blackbox_cls = blackbox_cls.eval()
 
         self.mode = img_type
 

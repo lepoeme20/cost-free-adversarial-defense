@@ -23,15 +23,16 @@ def set_seed(seed):
 
 def network_initialization(args):
     if args.black_box:
-        resnet, vgg = resnet110(args.num_class), vgg19(args.num_class)
+        # target, substitute = resnet110(args.num_class), resnet110(args.num_class)
+        target, substitute = resnet110(args.num_class), resnet34(args.num_class)
         if torch.cuda.device_count():
-            resnet = nn.DataParallel(resnet, device_ids=args.device_ids)
-            vgg = nn.DataParallel(vgg, device_ids=args.device_ids)
+            target = nn.DataParallel(target, device_ids=args.device_ids)
+            substitute = nn.DataParallel(substitute, device_ids=args.device_ids)
 
-        resnet.to(args.device)
-        vgg.to(args.device)
+        target.to(args.device)
+        substitute.to(args.device)
 
-        return(resnet, vgg)
+        return(target, substitute)
     else:
         if args.model=='110':
             net = resnet110(args.num_class)

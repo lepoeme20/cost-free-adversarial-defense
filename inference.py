@@ -24,31 +24,45 @@ class Test:
     def __init__(self, args):
         set_seed(args.seed)
         if args.black_box:
-            self.model, self.blackbox = network_initialization(args)
-            model_path = os.path.join(
+            # self.target, self.substitute = network_initialization(args)
+            self.substitute, self.target = network_initialization(args)
+            sub_model_path = os.path.join(
                 args.save_path,
                 args.dataset,
-                # "intra_model_vgg.pt"
-                "ce_200_model_vgg.pt"
+                # "ce_200_model_vgg.pt"
+                # "ce_model_34.pt"
+                # "ce_200_model_110.pt"
+                f"{args.test_model}_model_{args.model}.pt"
             )
-            self.blackbox.module.load_state_dict(torch.load(model_path)["model_state_dict"])
+            print("Substitue: ", sub_model_path)
+            self.substitute.module.load_state_dict(
+                torch.load(sub_model_path)["model_state_dict"]
+            )
+            self.substitute.eval()
         else:
-            self.model = network_initialization(args)
+            self.target = network_initialization(args)
 
-        model_path = os.path.join(
+        target_model_path = os.path.join(
             args.save_path,
             args.dataset,
             f"{args.test_model}_model_{args.model}.pt"
-            )
-        self.model.module.load_state_dict(torch.load(model_path)["model_state_dict"])
+            # "ce_200_model_110.pt"
+            # "ce_200_model_vgg.pt"
+            # "ce_model_34.pt"
+        )
+        print("Target: ", target_model_path)
+        self.target.module.load_state_dict(
+            torch.load(target_model_path)["model_state_dict"]
+        )
+        self.target.eval()
 
     def attack(self, tstloader, trnloader, black_box=None):
         attack_module = globals()[args.attack_name.lower()]
         attack_func = getattr(attack_module, args.attack_name)
         if args.black_box:
-            attacker = attack_func(self.model, args, trnloader, self.blackbox)
+            attacker = attack_func(self.target, args, trnloader, self.substitute)
         else:
-            attacker = attack_func(self.model, args, trnloader)
+            attacker = attack_func(self.target, args, trnloader)
         save_path = os.path.join("Adv_examples", args.dataset.lower())
         attacker.inference(
             args,
@@ -69,7 +83,6 @@ class Test:
             total_num = len(tst_loader)
 
             for step, (inputs, labels) in enumerate(tst_loader, 0):
-                model.eval()
                 if inputs.size(1) == 1:
                     inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
@@ -77,7 +90,7 @@ class Test:
                 inputs = norm(inputs, m, s)
 
                 with torch.no_grad():
-                    outputs, features = model(inputs)
+                    outputs, features = self.target(inputs)
                     _, predicted = torch.max(outputs, 1)
                     correct += predicted.eq(labels).sum().item()
 

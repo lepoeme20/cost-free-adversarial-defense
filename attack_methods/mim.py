@@ -14,12 +14,15 @@ from utils import Loss, get_center, get_m_s
 
 class MIM(Attack):
     def __init__(self, target_cls, args, train_loader, blackbox_cls=None):
-        super(MIM, self).__init__("MIM", target_cls, blackbox_cls)
+        super(MIM, self).__init__("MIM", target_cls)
         self.eps = args.eps
         self.alpha = args.eps/args.mim_step
         self.step = args.bim_step
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.blackbox_cls = blackbox_cls
+        if blackbox_cls is not None:
+            self.model = blackbox_cls
+        else:
+            self.model = target_cls
         self.adaptive = args.adaptive
         if self.adaptive:
             m, s = get_m_s(args)
@@ -39,10 +42,7 @@ class MIM(Attack):
 
         perturbation = 0
         for i in range(self.step):
-            if self.blackbox_cls is not None:
-                outputs, features = self.blackbox_cls(norm_fn(adv_imgs, m, s))
-            else:
-                outputs, features = self.target_cls(norm_fn(adv_imgs, m, s))
+            outputs, features = self.model(norm_fn(adv_imgs, m, s))
 
             if self.adaptive:
                 ce_loss = self.criterion_CE(outputs, labels)

@@ -13,10 +13,13 @@ from utils import Loss, get_center, get_m_s
 
 class FGSM(Attack):
     def __init__(self, target_cls, args, train_loader, blackbox_cls=None):
-        super(FGSM, self).__init__("FGSM", target_cls, blackbox_cls)
+        super(FGSM, self).__init__("FGSM", target_cls)
         self.eps = args.eps
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.blackbox_cls = blackbox_cls
+        if blackbox_cls is not None:
+            self.model = blackbox_cls
+        else:
+            self.model = target_cls
         self.adaptive = args.adaptive
         if self.adaptive:
             m, s = get_m_s(args)
@@ -29,16 +32,15 @@ class FGSM(Attack):
                 pre_center=center,
                 phase='intra',
             )
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, imgs, labels, norm_fn, m, s):
         imgs = imgs.clone().detach()
 
         imgs.requires_grad = True
 
-        if self.blackbox_cls is not None:
-            outputs, features = self.blackbox_cls(norm_fn(imgs, m, s))
-        else:
-            outputs, features = self.target_cls(norm_fn(imgs, m, s))
+        outputs, features = self.model(norm_fn(imgs, m, s))
+        print(self.softmax(outputs))
         _, predict = torch.max(outputs, 1)
 
         if self.adaptive:

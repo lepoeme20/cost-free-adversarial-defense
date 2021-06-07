@@ -15,13 +15,16 @@ from utils import Loss, get_center, get_m_s
 
 class PGD(Attack):
     def __init__(self, target_cls, args, train_loader, blackbox_cls=None):
-        super(PGD, self).__init__("PGD", target_cls, blackbox_cls)
+        super(PGD, self).__init__("PGD", target_cls)
         self.eps = args.eps
         self.alpha = self.eps/4
         self.n_iters = args.pgd_iters
         self.random_start = args.pgd_random_start
         self.criterion_CE = nn.CrossEntropyLoss()
-        self.blackbox_cls = blackbox_cls
+        if blackbox_cls is not None:
+            self.model = blackbox_cls
+        else:
+            self.model = target_cls
         self.adaptive = args.adaptive
         if self.adaptive:
             m, s = get_m_s(args)
@@ -44,10 +47,7 @@ class PGD(Attack):
             adv_imgs = torch.clamp(adv_imgs, 0, 1)
 
         for _ in range(self.n_iters):
-            if self.blackbox_cls is not None:
-                outputs, features = self.blackbox_cls(norm_fn(adv_imgs, m, s))
-            else:
-                outputs, features = self.target_cls(norm_fn(adv_imgs, m, s))
+            outputs, features = self.model(norm_fn(adv_imgs, m, s))
 
             if self.adaptive:
                 ce_loss = self.criterion_CE(outputs, labels)

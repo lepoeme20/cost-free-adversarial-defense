@@ -37,11 +37,13 @@ class MIM(Attack):
             )
 
     def forward(self, imgs, labels, norm_fn, m, s):
+        imgs = imgs.clone().detach()
         adv_imgs = imgs.clone().detach()
-        adv_imgs.requires_grad = True
 
-        perturbation = 0
+        momentum = torch.zeros_like(imgs).detach().to(imgs.device)
+
         for i in range(self.step):
+            adv_imgs.requires_grad = True
             outputs, features = self.model(norm_fn(adv_imgs, m, s))
 
             if self.adaptive:
@@ -53,13 +55,13 @@ class MIM(Attack):
 
             grad = torch.autograd.grad(loss, adv_imgs)[0]
             # compute grad mean
-            adv_mean = torch.mean(torch.abs(grad), dim=1, keepdim=True)
-            adv_mean = torch.mean(torch.abs(adv_mean), dim=2, keepdim=True)
-            adv_mean = torch.mean(torch.abs(adv_mean), dim=3, keepdim=True)
-            grad /= adv_mean
-            perturbation += grad
+            grad_norm = torch.norm(nn.Flatten()(grad), p=1, dim=1)
+            grad /= grad_norm.view([-1]+[1]*(len(grad.shape)-1))
+            grad += momentum*1.0 # decay term
+            momentum = grad
 
-            adv_imgs = adv_imgs+(self.alpha*perturbation.sign())
-            adv_imgs = torch.clamp(adv_imgs, 0, 1)
+            adv_imgs = adv_imgs.detach()+self.alpha*grad.sign()
+            delta = torch.clamp(adv_imgs - imgs, min=-self.eps, max=self.eps)
+            adv_imgs = torch.clamp(imgs + delta, min=0, max=1).detach()
 
         return adv_imgs.detach(), labels

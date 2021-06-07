@@ -40,7 +40,6 @@ class FGSM(Attack):
         imgs.requires_grad = True
 
         outputs, features = self.model(norm_fn(imgs, m, s))
-        print(self.softmax(outputs))
         _, predict = torch.max(outputs, 1)
 
         if self.adaptive:

@@ -40,13 +40,13 @@ class PGD(Attack):
 
     def forward(self, imgs, labels, norm_fn, m, s):
         adv_imgs = imgs.clone().detach()
-        adv_imgs.requires_grad = True
 
         if self.random_start:
             adv_imgs = adv_imgs + torch.empty_like(adv_imgs).uniform_(-self.eps, self.eps)
             adv_imgs = torch.clamp(adv_imgs, 0, 1)
 
         for _ in range(self.n_iters):
+            adv_imgs.requires_grad = True
             outputs, features = self.model(norm_fn(adv_imgs, m, s))
 
             if self.adaptive:
@@ -56,10 +56,12 @@ class PGD(Attack):
             else:
                 loss = self.criterion_CE(outputs, labels)
 
-            grad = torch.autograd.grad(loss, adv_imgs)[0]
+            grad = torch.autograd.grad(
+                loss, adv_imgs, retain_graph=False, create_graph=False
+            )[0]
 
-            adv_imgs = adv_imgs + self.alpha*grad.sign()
+            adv_imgs = adv_imgs.detach() + self.alpha*grad.sign()
             eta = torch.clamp(adv_imgs - imgs, min=-self.eps, max=self.eps)
-            adv_imgs = torch.clamp(imgs + eta, 0, 1)
+            adv_imgs = torch.clamp(imgs + eta, 0, 1).detach()
 
-        return adv_imgs.detach(), labels
+        return adv_imgs, labels

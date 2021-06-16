@@ -23,46 +23,22 @@ from attack_methods import pgd, fgsm, cw, bim, mim
 class Test:
     def __init__(self, args):
         set_seed(args.seed)
-        if args.black_box:
-            # self.target, self.substitute = network_initialization(args)
-            self.substitute, self.target = network_initialization(args)
-            sub_model_path = os.path.join(
-                args.save_path,
-                args.dataset,
-                # "ce_200_model_vgg.pt"
-                # "ce_model_34.pt"
-                # "ce_200_model_110.pt"
-                f"{args.test_model}_model_{args.model}.pt"
-            )
-            print("Substitue: ", sub_model_path)
-            self.substitute.module.load_state_dict(
-                torch.load(sub_model_path)["model_state_dict"]
-            )
-            self.substitute.eval()
-        else:
-            self.target = network_initialization(args)
+        self.target = network_initialization(args)
 
         target_model_path = os.path.join(
             args.save_path,
             args.dataset,
             f"{args.test_model}_model_{args.model}.pt"
-            # "ce_200_model_110.pt"
-            # "ce_200_model_vgg.pt"
-            # "ce_model_34.pt"
         )
-        print("Target: ", target_model_path)
         self.target.module.load_state_dict(
             torch.load(target_model_path)["model_state_dict"]
         )
         self.target.eval()
 
-    def attack(self, tstloader, trnloader, black_box=None):
+    def attack(self, tstloader):
         attack_module = globals()[args.attack_name.lower()]
         attack_func = getattr(attack_module, args.attack_name)
-        if args.black_box:
-            attacker = attack_func(self.target, args, trnloader, self.substitute)
-        else:
-            attacker = attack_func(self.target, args, trnloader)
+        attacker = attack_func(self.target, args)
         save_path = os.path.join("Adv_examples", args.dataset.lower())
         attacker.inference(
             args,
@@ -73,7 +49,7 @@ class Test:
 
     def testing(self):
         args.batch_size = args.test_batch_size
-        train_loader, _, tst_loader = get_dataloader(args)
+        _, _, tst_loader = get_dataloader(args)
         m, s = get_m_s(args)
 
         # 정상 데이터에 대한 모델 성능 확인
@@ -110,7 +86,7 @@ class Test:
             )
         # attack시 방어 성능 확인
         else:
-            self.attack(tst_loader, train_loader)
+            self.attack(tst_loader)
 
 
 if __name__ == "__main__":

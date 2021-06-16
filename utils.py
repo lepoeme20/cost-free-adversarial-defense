@@ -6,7 +6,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 from torchvision import transforms
-from vgg import vgg19
 from resnet import resnet34, resnet18, resnet110
 import torch.nn.functional as F
 
@@ -22,31 +21,16 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 def network_initialization(args):
-    if args.black_box:
-        # target, substitute = resnet110(args.num_class), resnet110(args.num_class)
-        target, substitute = resnet110(args.num_class), resnet34(args.num_class)
-        if torch.cuda.device_count():
-            target = nn.DataParallel(target, device_ids=args.device_ids)
-            substitute = nn.DataParallel(substitute, device_ids=args.device_ids)
+    net = resnet110(args.num_class)
 
-        target.to(args.device)
-        substitute.to(args.device)
+    # Using multi GPUs if you have
+    if torch.cuda.device_count():
+        net = nn.DataParallel(net, device_ids=args.device_ids)
 
-        return(target, substitute)
-    else:
-        if args.model=='110':
-            net = resnet110(args.num_class)
-        elif args.model=='vgg':
-            net = vgg19(args.num_class)
+    # change device to set device (CPU or GPU)
+    net.to(args.device)
 
-        # Using multi GPUs if you have
-        if torch.cuda.device_count():
-            net = nn.DataParallel(net, device_ids=args.device_ids)
-
-        # change device to set device (CPU or GPU)
-        net.to(args.device)
-
-        return net
+    return net
 
 
 def get_dataloader(args):

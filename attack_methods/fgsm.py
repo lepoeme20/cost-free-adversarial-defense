@@ -12,27 +12,11 @@ sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from utils import Loss, get_center, get_m_s
 
 class FGSM(Attack):
-    def __init__(self, target_cls, args, train_loader, blackbox_cls=None):
+    def __init__(self, target_cls, args):
         super(FGSM, self).__init__("FGSM", target_cls)
         self.eps = args.eps
         self.criterion_CE = nn.CrossEntropyLoss()
-        if blackbox_cls is not None:
-            self.model = blackbox_cls
-        else:
-            self.model = target_cls
-        self.adaptive = args.adaptive
-        if self.adaptive:
-            m, s = get_m_s(args)
-            center = get_center(
-                self.target_cls, train_loader, args.num_class, args.device, m, s
-            )
-            self.criterion = Loss(
-                args.num_class,
-                args.device,
-                pre_center=center,
-                phase='intra',
-            )
-        self.softmax = nn.Softmax(dim=1)
+        self.model = target_cls
 
     def forward(self, imgs, labels, norm_fn, m, s):
         imgs = imgs.clone().detach()
@@ -42,12 +26,7 @@ class FGSM(Attack):
         outputs, features = self.model(norm_fn(imgs, m, s))
         _, predict = torch.max(outputs, 1)
 
-        if self.adaptive:
-            ce_loss = self.criterion_CE(outputs, labels)
-            intra_loss = self.criterion(features, labels)
-            loss = ce_loss + intra_loss
-        else:
-            loss = self.criterion_CE(outputs, labels)
+        loss = self.criterion_CE(outputs, labels)
 
         grad = torch.autograd.grad(
             loss, imgs, retain_graph=False, create_graph=False)[0]

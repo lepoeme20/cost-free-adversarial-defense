@@ -14,29 +14,14 @@ sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from utils import Loss, get_center, get_m_s
 
 class PGD(Attack):
-    def __init__(self, target_cls, args, train_loader, blackbox_cls=None):
+    def __init__(self, target_cls, args):
         super(PGD, self).__init__("PGD", target_cls)
         self.eps = args.eps
         self.alpha = self.eps/4
         self.n_iters = args.pgd_iters
         self.random_start = args.pgd_random_start
         self.criterion_CE = nn.CrossEntropyLoss()
-        if blackbox_cls is not None:
-            self.model = blackbox_cls
-        else:
-            self.model = target_cls
-        self.adaptive = args.adaptive
-        if self.adaptive:
-            m, s = get_m_s(args)
-            center = get_center(
-                target_cls, train_loader, args.num_class, args.device, m, s
-            )
-            self.criterion = Loss(
-                args.num_class,
-                args.device,
-                pre_center=center,
-                phase='intra',
-            )
+        self.model = target_cls
 
     def forward(self, imgs, labels, norm_fn, m, s):
         adv_imgs = imgs.clone().detach()
@@ -49,12 +34,7 @@ class PGD(Attack):
             adv_imgs.requires_grad = True
             outputs, features = self.model(norm_fn(adv_imgs, m, s))
 
-            if self.adaptive:
-                ce_loss = self.criterion_CE(outputs, labels)
-                intra_loss = self.criterion(features, labels)
-                loss = ce_loss + intra_loss
-            else:
-                loss = self.criterion_CE(outputs, labels)
+            loss = self.criterion_CE(outputs, labels)
 
             grad = torch.autograd.grad(
                 loss, adv_imgs, retain_graph=False, create_graph=False

@@ -4,3 +4,4 @@ logger
 bestmodel
 .vscode
 ablation
+*.sh

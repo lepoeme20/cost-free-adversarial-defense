@@ -2,9 +2,11 @@ import os
 import torch
 import torch.nn as nn
 from utils import network_initialization, get_dataloader
-from torch.utils.tensorboard import SummaryWriter
 from utils import get_m_s, norm, get_optim, set_seed
 from tqdm import tqdm
+import datetime
+import time
+
 
 class Trainer():
     def __init__(self,args):
@@ -22,23 +24,11 @@ class Trainer():
         # set criterion
         self.criterion_CE = nn.CrossEntropyLoss()
 
-        # set logger path
-        log_num = 0
-        while os.path.exists(
-                f"logger/ce_{args.ce_epoch}_{args.model}/{args.dataset}/v{str(log_num)}"
-        ):
-            log_num += 1
-        self.writer = SummaryWriter(
-            f'logger/ce_{args.ce_epoch}_{args.model}/{args.dataset}/v{str(log_num)}'
-        )
-
     def training(self, args):
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(self.model, args.lr)
 
         model_path = os.path.join(self.save_path, f"ce_{args.ce_epoch}_model_{args.model}.pt")
-        self.writer.add_text(tag='argument', text_string=str(args.__dict__))
-        self.writer.close()
         best_loss = 1000
         current_step = 0
         dev_step = 0
@@ -48,8 +38,13 @@ class Trainer():
         best_epoch_log = tqdm(total=0, position=5, bar_format='{desc}')
         outer = tqdm(total=args.ce_epoch, desc="Epoch", position=0, leave=False)
 
+        os.makedirs('time_log', exist_ok=True)
+        f = open(f"time_log/{args.dataset}_{args.phase}.txt", 'w')
+        start_total = time.time()
+
         # Train target classifier
         for epoch in range(args.ce_epoch):
+            start_epoch = time.time()
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="[TRN] Step", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="[DEV] Step", position=3, leave=False)
@@ -77,20 +72,9 @@ class Trainer():
                 )
                 train.update(1)
 
-                # tensorboard logging
-                if current_step == 1 or current_step % len(self.train_loader) == 0:
-                    self.writer.add_scalar(
-                        tag="[TRN] loss", scalar_value=loss.item(), global_step=current_step
-                    )
-
-                if current_step == 1 or current_step % (len(self.train_loader)*1) == 0:
-                    self.writer.add_embedding(
-                        features,
-                        metadata=labels.data.cpu().numpy(),
-                        label_img=inputs,
-                        global_step=current_step,
-                        tag="[TRN] Features",
-                    )
+            epoch_time = round(time.time() - start_epoch)
+            epoch_time = str(datetime.timedelta(seconds=epoch_time))
+            f.write(f"Epoch {epoch+1}: "+str(epoch_time)+'\n')
 
             for idx, (inputs, labels) in enumerate(self.dev_loader, 0):
                 self.model.eval()
@@ -110,25 +94,10 @@ class Trainer():
                     _dev_loss += loss
                     dev_loss = _dev_loss/(idx+1)
 
-
-                    #################### Logging ###################
-                    dev.update(1)
                     dev_loss_log.set_description_str(
                         f"[DEV] Loss: {dev_loss.item():.4f}"
                     )
-                    if dev_step == 1 or dev_step % len(self.dev_loader) == 0:
-                        self.writer.add_scalar(
-                            tag="[DEV] loss", scalar_value=loss.item(), global_step=dev_step
-                        )
-
-                    if dev_step == 1 or dev_step % (len(self.dev_loader)*10) == 0:
-                        self.writer.add_embedding(
-                            features,
-                            metadata=labels.data.cpu().numpy(),
-                            label_img=inputs,
-                            global_step=dev_step,
-                            tag="[DEV] Features",
-                        )
+                    dev.update(1)
 
             scheduler.step(dev_loss)
             outer.update(1)
@@ -147,4 +116,7 @@ class Trainer():
                     },
                     model_path
                 )
-
+        total_time = round(time.time() - start_total)
+        total_time = str(datetime.timedelta(seconds=total_time))
+        f.write(f"Total: "+str(total_time)+'\n')
+        f.close()

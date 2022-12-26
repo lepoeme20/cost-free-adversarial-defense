@@ -7,7 +7,6 @@ import torch.optim as optim
 import torchvision
 from torchvision import transforms
 from resnet import resnet34, resnet18, resnet110
-from small_net import smallnet
 import torch.nn.functional as F
 
 def set_seed(seed):
@@ -22,17 +21,10 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 def network_initialization(args):
-    if args.model=='34':
-        net = resnet34(args.num_class)
-    elif args.model=='110':
-        net = resnet110(args.num_class)
-    elif args.model=='18':
-        net = resnet18(args.num_class)
-    else:
-        net = smallnet(args.model)
+    net = resnet110(args.num_class)
 
     # Using multi GPUs if you have
-    if torch.cuda.device_count() > 0:
+    if torch.cuda.device_count():
         net = nn.DataParallel(net, device_ids=args.device_ids)
 
     # change device to set device (CPU or GPU)
@@ -135,7 +127,6 @@ def get_optim(model, lr, intra=False):
         optimizer = optim.SGD(
             model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-3
         )
-    # optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.1, patience=10
     )
@@ -220,7 +211,8 @@ class Loss(nn.Module):
         center_dist_mat = torch.cdist(
             self.center, self.center, p=2
         )
-        self.thres_rest = torch.mean(center_dist_mat)/3 * 2
+        scale = 2 if num_class ==10 else 3/4*3
+        self.thres_rest = torch.mean(center_dist_mat)/3 * scale
         self.mse = nn.MSELoss(reduction='mean')
 
     def forward(self, features, labels, correct_idx=None):
@@ -231,10 +223,12 @@ class Loss(nn.Module):
             intra_loss = self.intra_loss(features, labels, correct_idx)
             return intra_loss
 
-    def intra_loss(self, features, labels, correct_idx):
+    def intra_loss(self, features, labels, correct_idx=None):
         masked_dist_mat = self._get_masked_dist_mat(features, labels)
-        dist = torch.sum(masked_dist_mat[correct_idx], 1)
-        # dist = torch.sum(masked_dist_mat, 1)
+        if correct_idx is not None:
+            dist = torch.sum(masked_dist_mat[correct_idx], 1)
+        else:
+            dist = torch.sum(masked_dist_mat, 1)
 
         loss = dist.sum()/dist.size(0)
         return loss
@@ -347,42 +341,3 @@ class LargeMarginLoss:
             loss_layer = _max_with_relu(0, self.dist_upper - loss_layer) - self.dist_upper
             loss = torch.cat([loss, loss_layer])
         return loss.mean()
-
-
-class Logger(object):
-    """
-    Write console output to external text file.
-
-    Code imported from https://github.com/Cysu/open-reid/blob/master/reid/utils/logging.py.
-    """
-    def __init__(self, fpath=None):
-        self.console = sys.stdout
-        self.file = None
-        if fpath is not None:
-            mkdir_if_missing(os.path.dirname(fpath))
-            self.file = open(fpath, 'w')
-
-    def __del__(self):
-        self.close()
-
-    def __enter__(self):
-        pass
-
-    def __exit__(self, *args):
-        self.close()
-
-    def write(self, msg):
-        self.console.write(msg)
-        if self.file is not None:
-            self.file.write(msg)
-
-    def flush(self):
-        self.console.flush()
-        if self.file is not None:
-            self.file.flush()
-            os.fsync(self.file.fileno())
-
-    def close(self):
-        self.console.close()
-        if self.file is not None:
-            self.file.close()

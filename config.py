@@ -38,7 +38,7 @@ def parser_setting(parser):
         help='Dataset name'
         )
     base_args.add_argument(
-        '--model', type=str, default='34', choices=['lenet', 'baseline', '18', '34', '110']
+        '--model', type=str, default='34', choices=['vgg', 'baseline', '18', '34', '110']
     )
     base_args.add_argument(
         "--data-root-path", type=str, default='/media/lepoeme20/Data/basics', help='data path'
@@ -52,10 +52,6 @@ def parser_setting(parser):
     )
 
     trn_args = parser.add_argument_group('training hyper params')
-    trn_args.add_argument(
-        '--adv-train', action='store_true', default=False,
-        help = 'if adversarial training'
-    )
     trn_args.add_argument(
         '--proposed', action='store_true', default=False,
         help = 'train with proposed loss'
@@ -93,7 +89,7 @@ def parser_setting(parser):
         '--lr', type=float, default=0.1, metavar='LR', help='learning rate (default: auto)'
         )
     opt_args.add_argument(
-        '--lr-intra', type=float, default=0.001, help='proposed center lr'
+        '--lr-shrinkage', type=float, default=0.001, help='lr for shrinkage phase'
     )
     opt_args.add_argument(
         '--b1', type=float, default=0.5, help='momentum (default: 0.9)'
@@ -138,7 +134,7 @@ def parser_setting(parser):
     )
     # arguments for C&W
     attack_args.add_argument(
-        '--cw-c', type=str2float, default=0.1, help="loss scaler"
+        '--cw-c', type=float, default=0.1, help="loss scaler"
     )
     attack_args.add_argument(
         '--cw-kappa', type=float, default=0, help="minimum value on clamping"
@@ -160,14 +156,6 @@ def parser_setting(parser):
         '--mim-step', type=int, default=10, help="Iteration for iterative FGSM"
     )
 
-    ablation_args = parser.add_argument_group('Ablation')
-    ablation_args.add_argument(
-        '--lambda-intra', type=float, default=1., help="Intra loss weight"
-    )
-    ablation_args.add_argument(
-        '--lambda-inter', type=float, default=1., help="Inter loss weight"
-    )
-
     return parser
 
 def get_config():
@@ -177,7 +165,6 @@ def get_config():
     args.device = torch.device(f'cuda:{args.device_ids[0]}' if torch.cuda.is_available else 'cpu')
 
     # number of input classes
-    # CelebA: Female/Male
     # Cifar100: A hundred classes
     # The rest: Ten classes
     args.num_class = 100 if args.dataset == 'cifar100' else 10

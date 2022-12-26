@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.distributed as dist
 from utils import network_initialization, get_dataloader
-from torch.utils.tensorboard import SummaryWriter
 from utils import (
     get_m_s,
     norm,
@@ -15,6 +14,8 @@ from utils import (
     LargeMarginLoss,
 )
 from tqdm import tqdm
+import datetime
+import time
 
 
 class Trainer:
@@ -41,8 +42,12 @@ class Trainer:
             )
         self.checkpoint = torch.load(pretrained_path)
         self.model.module.load_state_dict(self.checkpoint["model_state_dict"])
-        for param in self.model.module.fc.parameters():
-            param.requires_grad = False
+        try:
+            for param in self.model.module.fc.parameters():
+                param.requires_grad = False
+        except:
+            for param in self.model.module.classifier.parameters():
+                param.requires_grad = False
         self.center = get_center(
             self.model, self.train_loader, args.num_class, args.device, self.m, self.s
         )
@@ -56,16 +61,6 @@ class Trainer:
             phase=args.phase,
         )
 
-        # set logger path
-        log_num = 0
-        while os.path.exists(
-                f"logger/proposed/intra_loss_{args.model}/{args.dataset}/v{str(log_num)}"
-        ):
-            log_num += 1
-        self.writer = SummaryWriter(
-            f"logger/proposed/intra_loss_{args.model}/{args.dataset}/v{str(log_num)}"
-        )
-
     def training(self, args):
         # set optimizer & scheduler
         optimizer, scheduler = get_optim(
@@ -74,10 +69,8 @@ class Trainer:
 
         # base model
         model_name = f"intra_model_{args.model}.pt"
-        # model_path = os.path.join(self.save_path, model_name)
-        model_path = os.path.join(self.save_path, 'ablation', model_name)
+        model_path = os.path.join(self.save_path, model_name)
 
-        self.writer.add_text(tag="argument", text_string=str(args.__dict__))
         best_loss = 1000
         current_step = 0
         dev_step = 0
@@ -95,8 +88,13 @@ class Trainer:
         best_epoch_log = tqdm(total=0, position=5, bar_format='{desc}')
         outer = tqdm(total=args.epochs-trained_epoch, desc="Epoch", position=0, leave=False)
 
+        os.makedirs('time_log', exist_ok=True)
+        f = open(f"time_log/{args.dataset}_{args.phase}.txt", 'w')
+        start_total = time.time()
+
         # train target classifier
         for epoch in range(trained_epoch, args.epochs):
+            start_epoch = time.time()
             _dev_loss = 0.0
             train = tqdm(total=len(self.train_loader), desc="Steps", position=1, leave=False)
             dev = tqdm(total=len(self.dev_loader), desc="Steps", position=3, leave=False)
@@ -105,12 +103,9 @@ class Trainer:
                 self.model.train()
                 current_step += 1
 
+                if inputs.size(1) == 1:
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if args.adv_train:
-                    attacker = attack_func(self.model, args)
-                    adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
-                    inputs = torch.cat((inputs, adv_imgs), 0)
-                    labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
                 logit, features = self.model(inputs)
@@ -119,7 +114,7 @@ class Trainer:
                 ce_loss = self.criterion_CE(logit, labels)
                 intra_loss = self.criterion(features, labels, correct_idx)
 
-                loss = 0.00*ce_loss + 10.0*intra_loss
+                loss = 0.*ce_loss + 10.0*intra_loss
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -130,28 +125,17 @@ class Trainer:
                 )
                 train.update(1)
 
-                if current_step == 1 or current_step % len(self.train_loader) == 0:
-                    self.writer.add_scalar(
-                        tag="[TRN] loss", scalar_value=loss.item(), global_step=current_step
-                    )
-
-                if current_step == 1 or current_step % (len(self.train_loader)*1) == 0:
-                    self.writer.add_embedding(
-                        features,
-                        metadata=labels.data.cpu().numpy(),
-                        label_img=inputs,
-                        global_step=current_step,
-                        tag="[TRN] Features",
-                    )
+            epoch_time = round(time.time() - start_epoch)
+            epoch_time = str(datetime.timedelta(seconds=epoch_time))
+            f.write(f"Epoch {epoch+1}: "+str(epoch_time)+'\n')
 
             for idx, (inputs, labels) in enumerate(self.dev_loader):
                 self.model.eval()
                 dev_step += 1
+
+                if inputs.size(1) == 1:
+                    inputs = inputs.repeat(1, 3, 1, 1)
                 inputs, labels = inputs.to(args.device), labels.to(args.device)
-                if args.adv_train:
-                    adv_imgs, adv_labels = attacker.__call__(inputs, labels, norm, self.m, self.s)
-                    inputs = torch.cat((inputs, adv_imgs), 0)
-                    labels = torch.cat((labels, adv_labels))
                 inputs = norm(inputs, self.m, self.s)
 
                 with torch.no_grad():
@@ -171,27 +155,9 @@ class Trainer:
                         f"[DEV] CE Loss: {ce_loss.item():.4f} Intra Loss: {intra_loss.item():.4f}"
                     )
 
-                    #################### Logging ###################
                     dev.update(1)
-                    if dev_step == 1 or dev_step % len(self.dev_loader) == 0:
-                        self.writer.add_scalar(
-                            tag="[DEV] loss",
-                            scalar_value=dev_loss.item(),
-                            global_step=dev_step
-                        )
 
-                    if dev_step == 1 or dev_step % (len(self.dev_loader)*10) == 0:
-                        self.writer.add_embedding(
-                            features,
-                            metadata=labels.data.cpu().numpy(),
-                            label_img=inputs,
-                            global_step=dev_step,
-                            tag="[DEV] Features",
-                        )
-
-            # if epoch > 50 and dev_loss < best_loss:
-            # if dev_loss < best_loss:
-            if dev_loss < 5000:
+            if dev_loss > best_loss:
                 best_epoch_log.set_description_str(
                     f"Best Epoch: {epoch} / {args.epochs} | Best Loss: {dev_loss}"
                 )
@@ -205,11 +171,13 @@ class Trainer:
                         "best_loss": dev_loss,
                         "center": self.center
                     },
-                    # model_path[:-12] + str(epoch) + '_' + model_path[-12:]
                     f"{model_path.split('_')[0]}_{str(epoch)}_{'_'.join(model_path.split('_')[1:])}"
-                    # model_path[:-8] + str(epoch) + '_' + model_path[-8:]
-                    # model_path
                 )
 
             scheduler.step(dev_loss)
             outer.update(1)
+
+        total_time = round(time.time() - start_total)
+        total_time = str(datetime.timedelta(seconds=total_time))
+        f.write(f"Total: "+str(total_time)+'\n')
+        f.close()

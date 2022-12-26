@@ -12,9 +12,7 @@ class Attack(object):
     """
     def __init__(self, attack_type, target_cls, img_type='float'):
         self.attack_name = attack_type
-        self.target_cls = target_cls
-
-        self.device = next(target_cls.parameters()).device
+        self.target_cls = target_cls.eval()
 
         self.mode = img_type
 
@@ -31,8 +29,6 @@ class Attack(object):
             save_path {[type]} -- [description]
             data_loader {[type]} -- [description]
         """
-        self.target_cls.eval()
-
         adv_list = []
         label_list = []
 
@@ -81,7 +77,6 @@ class Attack(object):
         return adv_imgs, labels
 
     def __call__(self, *args):
-        self.target_cls.eval()
         adv_examples, labels = self.forward(*args)
 
         if self.mode.lower() == 'int':

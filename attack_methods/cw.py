@@ -65,7 +65,7 @@ class CW(Attack):
             best_L2 = mask*current_L2.detach() + (1-mask)*best_L2
 
             mask = mask.view([-1]+[1]*(dim-1))
-            best_adv_images = mask*adv_images.detach() + (1-mask)*best_adv_images
+            best_adv_images = mask*adv_images.detach() - (1-mask)*best_adv_images
 
             # Early Stop when loss does not converge.
             if step % (self.n_iters//10) == 0:
@@ -80,7 +80,8 @@ class CW(Attack):
 
     def inverse_tanh_space(self, x):
         # torch.atanh is only for torch >= 1.7.0
-        return self.atanh(x*2-1)
+        # return self.atanh(x*2-1)
+        return torch.atanh(x)
 
     def atanh(self, x):
         return 0.5*torch.log((1+x)/(1-x))
